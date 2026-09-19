@@ -1,0 +1,12 @@
+import Foundation
+
+enum AlternativeChange:Equatable { case timeShift(minutes:Int) }
+struct Alternative:Identifiable,Equatable { let id=UUID();var change:AlternativeChange;var assessment:ExposureAssessment;var reductionPercentByPollutant:[ExposureMetric.Pollutant:Double];func reductionPercent(for p:ExposureMetric.Pollutant)->Double?{reductionPercentByPollutant[p]};static func ==(l:Self,r:Self)->Bool{l.id==r.id} }
+struct CounterfactualResult { var original:ExposureAssessment;var alternatives:[Alternative];var bestMeaningful:Alternative?;var primaryPollutant:ExposureMetric.Pollutant?;var hadCandidates:Bool }
+enum CounterfactualEngine {
+ static let minimumMeaningfulDifferencePercent=10.0, candidateStepMinutes=15.0
+ static func evaluate(plan:ActivityPlan,series:EnvironmentalTimeSeries)->CounterfactualResult { let original=ExposureEngine.assess(series:series,start:plan.startTime,durationMinutes:plan.durationMinutes);let primary:ExposureMetric.Pollutant?=original.metric(.pm25) != nil ? .pm25 : (original.metric(.heat) != nil ? .heat:nil);var starts:[Date]=[];switch plan.constraints.timeFlexibility{case .fixed:break;case .halfHour,.oneHour:let f=plan.constraints.timeFlexibility.minutes;for m in stride(from:-f,through:f,by:15) where m != 0{starts.append(plan.startTime.addingTimeInterval(Double(m*60)))};case .flexible:if let e=plan.constraints.earliestStart,let l=plan.constraints.latestStart{var d=e;while d<=l{if abs(d.timeIntervalSince(plan.startTime))>60{starts.append(d)};d=d.addingTimeInterval(candidateStepMinutes*60)}}}
+ var options=starts.compactMap{start->Alternative? in let a=ExposureEngine.assess(series:series,start:start,durationMinutes:plan.durationMinutes);guard !a.metrics.isEmpty else{return nil};var reductions:[ExposureMetric.Pollutant:Double]=[:];for(p,m)in a.metrics{if let b=original.metric(p),b.exposure>0{reductions[p]=(b.exposure-m.exposure)/b.exposure*100}};return .init(change:.timeShift(minutes:Int(start.timeIntervalSince(plan.startTime)/60)),assessment:a,reductionPercentByPollutant:reductions)}
+ if let p=primary{options.sort{($0.reductionPercent(for:p) ?? -.infinity)>($1.reductionPercent(for:p) ?? -.infinity)}};let useful=Array(options.filter{guard let p=primary,let v=$0.reductionPercent(for:p) else{return false};return v>=minimumMeaningfulDifferencePercent}.prefix(5));return .init(original:original,alternatives:useful,bestMeaningful:useful.first,primaryPollutant:primary,hadCandidates:!starts.isEmpty)
+ }
+}
