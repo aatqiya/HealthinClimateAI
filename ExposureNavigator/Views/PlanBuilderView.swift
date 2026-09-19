@@ -16,10 +16,6 @@ struct PlanBuilderView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    Text(draft.editingEventID == nil ? "What's on your day?" : "Make this plan work for you.").font(.title2.bold())
-                    Text("Add the essentials. Explore your options before saving.").foregroundStyle(.secondary)
-                }
                 Section("Who") {
                     if app.profiles.profiles.isEmpty { Button("Create a profile to start") { app.selectedTab = .profile } }
                     Picker("Planning for", selection: $draft.profileID) {
