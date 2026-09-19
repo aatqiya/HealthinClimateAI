@@ -13,6 +13,22 @@
 
 No authentication backend, account credentials, or hosted AI credentials were supplied or present in the baseline. The app uses honest local-device entry. `AccountAuthenticating` and `PlanAssisting` define replacement boundaries. Do not put server secrets in the iOS bundle. A hosted implementation needs an authenticated backend and clear data disclosures. Send only necessary request context, not entire health profiles.
 
+### LiveKit voice planner
+
+Text Plan with AI works on-device. Voice is **Setup required** until you deploy the worker in `VoiceAgent/` and set a non-secret `RESILIO_VOICE_ENDPOINT` Info.plist string (HTTPS, or http://127.0.0.1 for local testing).
+
+The iOS client requests a short-lived room token from that endpoint, joins a LiveKit room, and registers RPC methods. The Python agent only talks and calls those methods. `PlanningAgent` still searches places, fetches forecasts, scores exposure, builds guidance, and saves events on the device. Snapshots sent back to the agent include spoken replies, missing slots, place names, and computed PM2.5/heat summaries. They never include medical conditions, medications, age, or home ZIP.
+
+```
+cd VoiceAgent
+cp .env.example .env   # add LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET, OPENAI_API_KEY
+python3 -m pip install -r requirements.txt
+python3 token_server.py          # POST /token → { url, token, room }
+python3 agent.py dev             # LiveKit worker named resilio-planner
+```
+
+Point `RESILIO_VOICE_ENDPOINT` at `https://your-host/token`. LiveKit and OpenAI keys stay in `.env`. This path has not been live-tested because no LiveKit project was supplied.
+
 ### Google Maps / Routes
 
 Google credentials and a backend are absent. Apple Maps remains the working address provider. Routes show **Setup required** and do not block event analysis.
@@ -44,5 +60,6 @@ Both are labeled **Setup required**. `ExternalCalendarConnecting` is the service
 - [Open-Meteo Air Quality API](https://open-meteo.com/en/docs/air-quality-api)
 - [Google Routes API](https://developers.google.com/maps/documentation/routes/compute_route_directions)
 - [Apple EventKit access](https://developer.apple.com/documentation/EventKit/accessing-the-event-store)
+- [LiveKit Agents tools / frontend RPC](https://docs.livekit.io/agents/logic/tools/forwarding/)
 
 Open-Meteo's public endpoint usage and licensing should be reviewed for the intended production deployment. No commercial service configuration is included in this repository.

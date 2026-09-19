@@ -19,9 +19,10 @@ struct SettingsView: View {
             Section("Services") {
                 LabeledContent("Address search", value: "Apple Maps")
                 LabeledContent("Google Maps & routes", value: GoogleRoutesService.isConfigured ? "Configured · not verified" : "Setup required")
-                LabeledContent("Plan assistant", value: "On-device parser")
+                LabeledContent("Plan assistant", value: "On-device conversation")
+                LabeledContent("Voice planner", value: LiveKitVoiceService.isConfigured ? "Configured · LiveKit tools run on this device" : "Setup required")
                 LabeledContent("Account sign-in", value: "Setup required")
-                Text("Hosted AI, Google Calendar, and Outlook require service configuration. Your local profiles and plans work without an account.").font(.caption).foregroundStyle(.secondary)
+                Text("Hosted voice, Google Calendar, and Outlook require service configuration. Text planning works without an account. Voice transcripts go to your LiveKit agent; health details stay on this device.").font(.caption).foregroundStyle(.secondary)
             }
             Section("Privacy") {
                 NavigationLink("Terms & privacy") { LegalView() }

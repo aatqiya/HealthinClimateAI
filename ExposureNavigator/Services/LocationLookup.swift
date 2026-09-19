@@ -32,11 +32,7 @@ final class AddressSearchService: NSObject, @preconcurrency MKLocalSearchComplet
         return try place(item)
     }
     func lookup(_ address: String) async throws -> [ActivityLocation] {
-        let request = MKLocalSearch.Request(); request.naturalLanguageQuery = address
-        let response = try await MKLocalSearch(request: request).start()
-        let matches = response.mapItems.prefix(6).compactMap { try? place($0) }
-        guard !matches.isEmpty else { throw EnvironmentalDataError.invalidLocation }
-        return matches
+        try await MapKitPlaceSearch().lookup(address)
     }
     func resolveAddress(_ address: String) async throws -> ActivityLocation {
         guard var location = try await lookup(address).first else { throw EnvironmentalDataError.invalidLocation }
@@ -44,6 +40,21 @@ final class AddressSearchService: NSObject, @preconcurrency MKLocalSearchComplet
         return location
     }
     private func place(_ item: MKMapItem) throws -> ActivityLocation {
+        try MapKitPlaceSearch.place(item)
+    }
+}
+
+struct MapKitPlaceSearch: PlaceSearching {
+    func lookup(_ address: String) async throws -> [ActivityLocation] {
+        let request = MKLocalSearch.Request()
+        request.naturalLanguageQuery = address
+        let response = try await MKLocalSearch(request: request).start()
+        let matches = response.mapItems.prefix(6).compactMap { try? Self.place($0) }
+        guard !matches.isEmpty else { throw EnvironmentalDataError.invalidLocation }
+        return Array(matches)
+    }
+
+    static func place(_ item: MKMapItem) throws -> ActivityLocation {
         guard let location = item.placemark.location else { throw EnvironmentalDataError.invalidLocation }
         return .init(name: item.name ?? "Selected place", formattedAddress: [item.placemark.subThoroughfare, item.placemark.thoroughfare, item.placemark.locality, item.placemark.administrativeArea, item.placemark.postalCode].compactMap { $0 }.joined(separator: " "), latitude: location.coordinate.latitude, longitude: location.coordinate.longitude, timeZoneIdentifier: item.timeZone?.identifier)
     }

@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		A2000003 /* LiveKit in Frameworks */ = {isa = PBXBuildFile; productRef = A2000002 /* LiveKit */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		A1000003 /* ExposureNavigator */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
@@ -19,6 +23,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A2000003 /* LiveKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -60,6 +65,9 @@
 				A1000003 /* ExposureNavigator */,
 			);
 			name = ExposureNavigator;
+			packageProductDependencies = (
+				A2000002 /* LiveKit */,
+			);
 			productName = ExposureNavigator;
 			productReference = A1000007 /* ExposureNavigator.app */;
 			productType = "com.apple.product-type.application";
@@ -98,6 +106,9 @@
 			);
 			mainGroup = A1000001;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				A2000001 /* XCRemoteSwiftPackageReference "client-sdk-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A1000002 /* Products */;
 			projectDirPath = "";
@@ -183,6 +194,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Use your location for nearby forecasts. Coordinates are sent to weather services; saved activity locations stay on this device.";
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Connect Apple Calendar only when you choose, so your events can appear together.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Voice planning listens only while you turn the microphone on in Plan with AI. Speech is sent to your configured LiveKit agent; health details stay on this device.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -213,6 +225,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Use your location for nearby forecasts. Coordinates are sent to weather services; saved activity locations stay on this device.";
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Connect Apple Calendar only when you choose, so your events can appear together.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Voice planning listens only while you turn the microphone on in Plan with AI. Speech is sent to your configured LiveKit agent; health details stay on this device.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -253,6 +266,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A2000001 /* XCRemoteSwiftPackageReference "client-sdk-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/livekit/client-sdk-swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.6.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A2000002 /* LiveKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A2000001 /* XCRemoteSwiftPackageReference "client-sdk-swift" */;
+			productName = LiveKit;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = A1000000 /* Project object */;
 }

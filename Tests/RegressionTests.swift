@@ -105,6 +105,92 @@ struct RegressionTests {
         _ = try await repository.fetchConditions(latitude: 40, longitude: -73, range: hour...hour.addingTimeInterval(3600))
         let count = await provider.count
         check(count == 1, "simultaneous requests coalesce and minute checks reuse cached forecast")
+
+        let calendar = Calendar.current
+        let six = calendar.date(bySettingHour: 18, minute: 0, second: 0, of: hour) ?? hour.addingTimeInterval(18 * 3600)
+        let eveningNow = six.addingTimeInterval(-3600)
+        let eveningSeries = series((-2..<8).map { EnvironmentalSample(timestamp: six.addingTimeInterval(Double($0) * 3600), pm25: $0 == 0 ? 40 : 10, apparentTemperatureC: 28) })
+        let places = StubPlaceSearch(results: [location])
+        let sessionProvider = CountingProvider(series: eveningSeries)
+        var agent = PlanningAgent(places: places, environment: sessionProvider)
+        var session = PlanningSession.started()
+        session = await agent.handle("Schedule a run at 6pm", session: session, profiles: [profile], now: eveningNow)
+        check(session.phase == .collecting && session.draft.activityType == .exercise && session.draft.location == nil, "first turn extracts activity without inventing a place")
+        check(session.messages.contains { $0.role == .assistant && $0.text.localizedCaseInsensitiveContains("who") }, "missing-slot questions ask who is missing")
+        check(places.lookups == 0 && session.lastResult == nil, "place required before fetch")
+        let fetchesAfterFirst = await sessionProvider.count
+        check(fetchesAfterFirst == 0, "forecast is not requested before a resolved place")
+
+        session = await agent.handle("Maya today for 45 minutes", session: session, profiles: [profile], now: eveningNow)
+        check(session.draft.profileID == profile.id && session.knowledge.duration && session.draft.durationMinutes == 45, "follow-up turn fills profile and duration")
+        session = await agent.handle("near Test field", session: session, profiles: [profile], now: eveningNow)
+        check(session.draft.location == location && places.lookups == 1, "place search stores a resolved location")
+        let fetchesAfterPlace = await sessionProvider.count
+        check(fetchesAfterPlace == 0 && session.phase == .collecting, "flexibility is required before analysis")
+        check(session.messages.last?.text.localizedCaseInsensitiveContains("earlier or later") == true, "bot asks whether the start time can move")
+
+        session = await agent.handle("the time is fixed", session: session, profiles: [profile], now: eveningNow)
+        check(session.phase == .recommending && session.lastResult?.alternatives.isEmpty == true, "no alternatives when flexibility is fixed")
+        let fetchesAfterFixed = await sessionProvider.count
+        check(fetchesAfterFixed == 1, "analysis runs once the place is resolved")
+
+        let flexiblePlaces = StubPlaceSearch(results: [location])
+        let flexibleProvider = CountingProvider(series: eveningSeries)
+        agent = PlanningAgent(places: flexiblePlaces, environment: flexibleProvider)
+        session = PlanningSession.started()
+        session = await agent.handle("Maya has a run today at 6 pm for 45 minutes near Test field", session: session, profiles: [profile], now: eveningNow)
+        session = await agent.handle("up to 1 hour", session: session, profiles: [profile], now: eveningNow)
+        check(session.phase == .recommending && session.lastPlan != nil && session.lastResult != nil, "complete plan with flexibility reaches recommendation")
+        let engineResult = CounterfactualEngine.evaluate(plan: session.lastPlan!, series: eveningSeries, now: eveningNow)
+        check(session.lastResult!.alternatives.map { $0.reductionPercent(for: .pm25) ?? -1 } == engineResult.alternatives.map { $0.reductionPercent(for: .pm25) ?? -1 }, "alternatives only come from CounterfactualEngine")
+        check(!session.lastResult!.alternatives.isEmpty, "fixture produces time alternatives when flexibility allows")
+        check(session.lastGuidance.contains { $0.title == "For respiratory conditions" } && session.lastGuidance.contains { $0.title == "Heat guidance" }, "guidance appears when profile and forecast match")
+        let mayaSession = session
+
+        let plain = UserProfile(name: "Alex", relationship: .myself)
+        let plainPlaces = StubPlaceSearch(results: [location])
+        let plainProvider = CountingProvider(series: eveningSeries)
+        agent = PlanningAgent(places: plainPlaces, environment: plainProvider)
+        session = PlanningSession.started()
+        session = await agent.handle("Alex has a run today at 6 pm for 45 minutes near Test field", session: session, profiles: [plain], now: eveningNow)
+        session = await agent.handle("up to 1 hour", session: session, profiles: [plain], now: eveningNow)
+        check(session.lastGuidance.contains { $0.title == "Air quality guidance" }, "public air-quality guidance still appears without health tags")
+        check(!session.lastGuidance.contains { $0.title == "For respiratory conditions" }, "respiratory guidance is not attached without a matching condition")
+
+        session = await agent.handle("which route is safer?", session: session, profiles: [plain], now: eveningNow)
+        check(session.messages.last?.text.contains("can't pick a cleaner path") == true, "route ranking is refused")
+
+        let directory2 = FileManager.default.temporaryDirectory.appendingPathComponent("resilio-session-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: directory2) }
+        let saved = EventStore(directory: directory2)
+        let persisted = agent.save(mayaSession, events: saved, profiles: [profile], now: eveningNow, unit: "celsius")
+        check(persisted.phase == .confirmed && saved.events.count == 1, "save writes one event")
+        let encodedSaved = try JSONEncoder.appEncoder.encode(saved.events[0])
+        check(!String(data: encodedSaved, encoding: .utf8)!.contains("Asthma"), "saved assistant events do not duplicate health details")
+
+        let voiceSnapshot = VoicePlanningFormat.snapshot(session: mayaSession, profiles: [profile], now: eveningNow)
+        let voiceJSON = try VoicePlanningFormat.encode(voiceSnapshot)
+        check(voiceSnapshot.routeComparisonAvailable == false && voiceJSON.contains("spokenReply"), "voice snapshot is redacted plan state, not a route ranking")
+        check(!voiceJSON.contains("Asthma") && !voiceJSON.contains("10044") && !voiceJSON.contains("medicalConditions"), "voice snapshots omit health fields")
+        let voicePlaces = StubPlaceSearch(results: [location])
+        let voiceProvider = CountingProvider(series: eveningSeries)
+        let broker = VoiceToolBroker(agent: PlanningAgent(places: voicePlaces, environment: voiceProvider), profiles: [profile], events: nil, temperatureUnit: "celsius", now: eveningNow)
+        var voiceSession = PlanningSession.started()
+        voiceSession = await broker.dispatch("planning_turn", payload: "{\"message\":\"Schedule a run at 6pm\"}", session: voiceSession)
+        check(voiceSession.draft.activityType == .exercise && voicePlaces.lookups == 0, "voice planning_turn uses the on-device agent")
+        voiceSession = await broker.dispatch("planning_turn", payload: "{\"message\":\"which route is safer?\"}", session: voiceSession)
+        check(voiceSession.messages.last?.text.contains("can't pick a cleaner path") == true, "voice tools refuse route ranking")
         print("\(passed) regression checks passed")
+    }
+}
+
+final class StubPlaceSearch: PlaceSearching, @unchecked Sendable {
+    var results: [ActivityLocation]
+    var lookups = 0
+    init(results: [ActivityLocation]) { self.results = results }
+    func lookup(_ query: String) async throws -> [ActivityLocation] {
+        lookups += 1
+        guard !results.isEmpty else { throw EnvironmentalDataError.invalidLocation }
+        return results
     }
 }

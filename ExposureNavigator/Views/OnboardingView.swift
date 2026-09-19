@@ -85,7 +85,7 @@ struct LegalView: View {
             Section("Privacy Policy · version 1") {
                 Text("Profiles, optional health details, and plans are stored on this device in protected app files. They are not sent to environmental services. Device backups may include app data according to your device settings.")
                 Text("Address searches are sent to Apple Maps. Environmental requests send coordinates to Open-Meteo. These providers also receive normal network connection information. Location permission is optional.")
-                Text("The plan assistant in this version runs locally. No medical records or Apple Health data are accessed. If you connect Apple Calendar, events are read on this device. Export occurs only when you explicitly save in the Apple Calendar editor.")
+                Text("The plan assistant in this version runs locally. Optional voice uses a LiveKit agent you configure; speech goes to that service, and planning tools still run on this device. Health details are not sent. No medical records or Apple Health data are accessed. If you connect Apple Calendar, events are read on this device. Export occurs only when you explicitly save in the Apple Calendar editor.")
                 Text("You can remove health information in Edit Profile, delete plans in Calendar, and change location and calendar permissions in iOS Settings. Deleting a profile also deletes its Resilio plans after confirmation. External calendar copies are separate.")
                 Link("Apple privacy policy", destination: URL(string: "https://www.apple.com/legal/privacy/")!)
                 Link("Open-Meteo privacy policy", destination: URL(string: "https://open-meteo.com/en/terms")!)

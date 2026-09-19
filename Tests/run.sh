@@ -6,10 +6,14 @@ swiftc -module-cache-path /tmp/resilio-swift-cache \
   ExposureNavigator/Models/*.swift \
   ExposureNavigator/Storage/*.swift \
   ExposureNavigator/Engine/*.swift \
+  ExposureNavigator/Guidance/*.swift \
   ExposureNavigator/Services/EnvironmentalDataProviding.swift \
   ExposureNavigator/Services/OpenMeteoProvider.swift \
   ExposureNavigator/Services/ForecastRepository.swift \
   ExposureNavigator/Services/IntegrationServices.swift \
   ExposureNavigator/Services/LocalPlanAssistant.swift \
+  ExposureNavigator/Services/PlanningAgent.swift \
+  ExposureNavigator/Services/VoicePlanningContract.swift \
+  ExposureNavigator/Services/VoiceToolBroker.swift \
   Tests/RegressionTests.swift -o /tmp/resilio-regression-tests
 /tmp/resilio-regression-tests
