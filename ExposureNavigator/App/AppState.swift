@@ -12,8 +12,14 @@ final class AppState {
     let profiles = ProfileStore()
     let events = EventStore()
     let environment = EnvironmentStore()
+    let location = LocationManager()
+    let calendars = CalendarService()
+    var manualLocation: ActivityLocation? {
+        didSet { if let data = try? JSONEncoder.appEncoder.encode(manualLocation) { UserDefaults.standard.set(data, forKey: "manualLocation") } }
+    }
 
     init() {
+        manualLocation = UserDefaults.standard.data(forKey: "manualLocation").flatMap { try? JSONDecoder.appDecoder.decode(ActivityLocation.self, from: $0) }
         onboardingComplete = UserDefaults.standard.bool(forKey: "onboardingComplete")
     }
 
@@ -26,17 +32,4 @@ final class AppState {
         selectedEventID = event.id
         selectedTab = .calendar
     }
-}
-
-struct PlanDraft: Equatable {
-    var profileID: UUID?
-    var activityName = ""
-    var activityType: ActivityType = .other
-    var addressQuery = ""
-    var location: ActivityLocation?
-    var startTime = Date().addingTimeInterval(3600)
-    var durationMinutes = 60
-    var flexibility: TimeFlexibility = .fixed
-    var earliestStart: Date?
-    var latestStart: Date?
 }

@@ -3,8 +3,27 @@ import Observation
 
 @Observable @MainActor
 final class EnvironmentStore {
-    struct Cached { var series:EnvironmentalTimeSeries; var checkedAt:Date }
-    var current:Cached?; var errorMessage:String?; var isLoading=false
-    private let provider:EnvironmentalDataProviding=OpenMeteoProvider(); private var cache:[String:Cached]=[:]
-    func refresh(location:ActivityLocation,force:Bool=false) async { let key=String(format:"%.2f,%.2f",location.latitude,location.longitude); let now=Date(); if !force,let hit=cache[key],now.timeIntervalSince(hit.checkedAt)<300{current=hit;return};isLoading=true;defer{isLoading=false};do{let range=now.addingTimeInterval(-3600)...now.addingTimeInterval(60*60*48);let s=try await provider.fetchConditions(latitude:location.latitude,longitude:location.longitude,range:range);let c=Cached(series:s,checkedAt:now);cache[key]=c;current=c;errorMessage=nil}catch{errorMessage=(error as? LocalizedError)?.errorDescription ?? error.localizedDescription}}
+    struct Cached { var series: EnvironmentalTimeSeries; var checkedAt: Date; var location: ActivityLocation }
+    var current: Cached?
+    var errorMessage: String?
+    var isLoading = false
+    var lastCheckedAt: Date?
+    private let provider: EnvironmentalDataProviding
+    private var requestID = UUID()
+    init(provider: EnvironmentalDataProviding = ForecastRepository.shared) { self.provider = provider }
+    func refresh(location: ActivityLocation, force: Bool = false) async {
+        let id = UUID(); requestID = id; lastCheckedAt = Date()
+        if let previous = current, previous.location != location { current = nil }
+        isLoading = true
+        defer { if requestID == id { isLoading = false } }
+        do {
+            let now = Date()
+            let series = try await provider.fetchConditions(latitude: location.latitude, longitude: location.longitude, range: now...now.addingTimeInterval(3600))
+            guard requestID == id else { return }
+            current = .init(series: series, checkedAt: now, location: location); errorMessage = nil
+        } catch {
+            guard requestID == id else { return }
+            errorMessage = current == nil ? "Couldn't load conditions. Check your connection and try again." : "Couldn't refresh. Showing the last available forecast."
+        }
+    }
 }

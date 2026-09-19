@@ -18,6 +18,7 @@ struct EnvironmentalSample: Codable, Equatable {
     var timestamp: Date
     /// µg/m³
     var pm25: Double? = nil
+    var usAQI: Double? = nil
     /// µg/m³
     var ozone: Double? = nil
     /// °C
@@ -34,6 +35,7 @@ struct EnvironmentalTimeSeries: Codable, Equatable {
     var samples: [EnvironmentalSample]
     var source: String
     var kind: MeasurementKind
+    var sourceUpdatedAt: Date? = nil
     var fetchedAt: Date
     var timeZoneIdentifier: String
     var intervalSemantics: String

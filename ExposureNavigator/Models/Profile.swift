@@ -32,6 +32,16 @@ struct UserProfile: Identifiable, Codable, Equatable {
         self.id=id; self.name=name; self.relationship=relationship; self.age=age; self.homeZipCode=homeZipCode; self.medicalConditions=medicalConditions; self.mentalConditions=mentalConditions; self.medications=medications; self.source=source; self.createdAt=createdAt; self.updatedAt=updatedAt
     }
 
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id); try c.encode(name, forKey: .name)
+        try c.encode(relationship, forKey: .relationship); try c.encodeIfPresent(age, forKey: .age)
+        try c.encodeIfPresent(homeZipCode, forKey: .homeZipCode)
+        try c.encode(medicalConditions, forKey: .medicalConditions); try c.encode(mentalConditions, forKey: .mentalConditions)
+        try c.encode(medications, forKey: .medications); try c.encode(source, forKey: .source)
+        try c.encode(createdAt, forKey: .createdAt); try c.encode(updatedAt, forKey: .updatedAt)
+    }
+
     enum CodingKeys: String, CodingKey { case id,name,relationship,age,homeZipCode,medicalConditions,mentalConditions,medications,healthConsiderations,source,createdAt,updatedAt }
     init(from decoder: Decoder) throws {
         let c=try decoder.container(keyedBy: CodingKeys.self)

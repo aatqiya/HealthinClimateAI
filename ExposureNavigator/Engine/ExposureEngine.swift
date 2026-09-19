@@ -81,7 +81,7 @@ enum ExposureEngine {
                 let overlapStart = max(sampleStart, start)
                 let overlapEnd = min(sampleEnd, end)
                 let overlap = overlapEnd.timeIntervalSince(overlapStart)
-                guard overlap > 0, let value = value(of: pollutant, in: sample) else { continue }
+                guard overlap > 0, let value = value(of: pollutant, in: sample), value.isFinite, (pollutant == .heat || value >= 0) else { continue }
 
                 weightedSum += value * overlap
                 coveredSeconds += overlap

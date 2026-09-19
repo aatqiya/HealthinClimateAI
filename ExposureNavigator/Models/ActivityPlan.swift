@@ -32,12 +32,12 @@ struct ActivityPlan: Identifiable, Codable, Equatable, Hashable {
     var endTime: Date { startTime.addingTimeInterval(TimeInterval(durationMinutes*60)) }
 }
 struct ExposureSnapshot: Codable, Equatable {
-    var analyzedAt: Date; var source: String; var sourceUpdatedAt: Date; var originalStart: Date; var selectedStart: Date; var pm25Mean: Double?; var apparentTemperatureC: Double?; var reductionPercent: Double?
+    var sourceRetrievedAt: Date? = nil; var sourceMeasurementUpdatedAt: Date? = nil; var analyzedAt: Date; var source: String; var sourceUpdatedAt: Date; var originalStart: Date; var selectedStart: Date; var pm25Mean: Double?; var apparentTemperatureC: Double?; var reductionPercent: Double?
 }
 struct ActivityEvent: Identifiable, Codable, Equatable {
     var id=UUID(); var plan: ActivityPlan; var selectedStart: Date; var selectedRoute: RouteOption?; var analysis: ExposureSnapshot?; var source: CalendarSource = .exposureNavigator; var createdAt=Date()
     var profileID: UUID { plan.profileID }; var endTime: Date { selectedStart.addingTimeInterval(TimeInterval(plan.durationMinutes*60)) }
 }
 enum TransportMode: String, Codable, CaseIterable { case walking, cycling, driving }
-struct RouteOption: Identifiable, Codable, Equatable { var id=UUID(); var name:String; var durationMinutes:Int; var distanceMeters:Double; var encodedPolyline:String?; var mode:TransportMode; var environmentalComparisonAvailable=false }
+struct RouteOption: Identifiable, Codable, Equatable { var origin: ActivityLocation? = nil; var destination: ActivityLocation? = nil; var id=UUID(); var name:String; var durationMinutes:Int; var distanceMeters:Double; var encodedPolyline:String?; var mode:TransportMode; var environmentalComparisonAvailable=false }
 enum CalendarSource: String, Codable { case exposureNavigator="Exposure Navigator", apple="Apple Calendar", google="Google Calendar", outlook="Outlook" }

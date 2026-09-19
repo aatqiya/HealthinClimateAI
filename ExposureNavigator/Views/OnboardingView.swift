@@ -1,17 +1,95 @@
 import SwiftUI
 
-struct OnboardingView:View {
- @Environment(AppState.self) private var app
- @State private var step=0;@State private var terms=false;@State private var privacy=false;@State private var location=LocationManager();@State private var manualLocation="";@State private var creatingProfile=false
- var body:some View{NavigationStack{VStack(alignment:.leading,spacing:24){Spacer();Image(systemName:icon).font(.system(size:44)).foregroundStyle(.tint);Text(title).font(.largeTitle.bold());Text(bodyText).font(.title3).foregroundStyle(.secondary);content;Spacer();Button(step==4 ? "Start planning":(step==3 ? "Continue to profiles":"Continue")){advance()}.buttonStyle(.borderedProminent).controlSize(.large).frame(maxWidth:.infinity).disabled((step==2&&(!terms||!privacy)) || (step==4&&app.profiles.profiles.isEmpty))}.padding(24).navigationTitle(step==0 ? "Sign In":"Setup").navigationBarTitleDisplayMode(.inline)}}
- @ViewBuilder var content:some View{switch step{case 0:Button("Continue on this device"){advance()}.buttonStyle(.borderedProminent);Text("Account sign-in is not configured in this build. Your profiles and plans stay on this device.").font(.footnote).foregroundStyle(.secondary)
- case 1:Button("Allow Location"){location.request();advance()}.buttonStyle(.borderedProminent);TextField("Or enter a city or address",text:$manualLocation).textFieldStyle(.roundedBorder);Button("Continue without location"){advance()}
- case 2:Toggle("I agree to the Terms of Service",isOn:$terms);Toggle("I agree to the Privacy Policy",isOn:$privacy);NavigationLink("Read Terms and Privacy"){LegalView()}
- case 3:VStack(alignment:.leading,spacing:12){Label("Your health information is optional.",systemImage:"heart.text.square").font(.headline);Text("The app only considers information you voluntarily provide. You can use it without adding medical conditions, medications, mental health information, or other health details. You can edit or remove this information later.");Text("The app does not access medical records or Apple Health.").foregroundStyle(.secondary)}
- default:VStack(alignment:.leading,spacing:12){Text("Who are you planning for?").font(.headline);Text("Profiles personalize environmental information for you or someone you care for.").foregroundStyle(.secondary);ForEach(app.profiles.profiles){p in Button{app.profiles.select(p.id)}label:{ProfileCard(profile:p,selected:p.id==app.profiles.selectedProfileID)}};Button("Create a profile",systemImage:"person.badge.plus"){creatingProfile=true};Button("Use demo profile Maya"){app.profiles.addSampleProfiles()}}.sheet(isPresented:$creatingProfile){ProfileEditorView(profile:.init(name:"",relationship:.myself),onSave:app.profiles.add,onDelete:nil)}}}
- var title:String{["Plan your day around the environment.","Use your location","Terms and privacy","You choose what to share","Choose a profile"][step]}
- var bodyText:String{["See how heat and air quality may affect your plans and explore lower-exposure options that fit your schedule.","We use your location to show conditions around you and compare conditions for your plans. You can also enter locations yourself.","Please review and agree before continuing.","Personal details are used only when they help personalize your experience.","Select an existing profile or create one to continue."][step]}
- var icon:String{["leaf","location","checkmark.shield","person.crop.circle.badge.checkmark","person.2"][step]}
- func advance(){if step<4{step+=1}else{app.finishOnboarding()}}
+struct OnboardingView: View {
+    @Environment(AppState.self) private var app
+    @AppStorage("onboardingStep") private var step = 0
+    @State private var terms = false
+    @State private var privacy = false
+    @State private var creatingProfile = false
+    @State private var choosingLocation = false
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 28) {
+                    ResilioBrand(large: true).padding(.top, 24)
+                    if step > 0 { Text("GETTING STARTED  ·  \(step) OF 4").font(.caption.weight(.semibold)).tracking(2).foregroundStyle(.secondary) }
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(title).font(.system(.largeTitle, design: .rounded, weight: .bold))
+                        Text(bodyText).font(.title3).foregroundStyle(.secondary)
+                    }
+                    content
+                    if step != 0 && step != 1 {
+                        Button(step == 4 ? "Start planning" : "Continue", action: advance)
+                            .buttonStyle(PrimaryButtonStyle())
+                            .disabled((step == 2 && (!terms || !privacy)) || (step == 4 && app.profiles.selectedProfile == nil))
+                            .opacity((step == 2 && (!terms || !privacy)) || (step == 4 && app.profiles.selectedProfile == nil) ? 0.45 : 1)
+                    }
+                    if step > 0 { Button("Back") { step -= 1 }.frame(maxWidth: .infinity, minHeight: 44) }
+                }.padding(24)
+            }.background(ResilioTheme.background)
+                .sheet(isPresented: $choosingLocation) { LocationPickerView { app.manualLocation = $0; advance() } }
+                .sheet(isPresented: $creatingProfile) { ProfileEditorView(profile: .init(name: "", relationship: .myself), onSave: app.profiles.add, onDelete: nil) }
+        }
+    }
+    @ViewBuilder var content: some View {
+        switch step {
+        case 0:
+            VStack(spacing: 14) {
+                Button("Continue on this device", action: advance).buttonStyle(PrimaryButtonStyle())
+                Text("No account needed for this version. Profiles and plans are saved on this device. Account sign-in isn't available yet.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+        case 1:
+            VStack(spacing: 12) {
+                Button("Use my location") { app.location.request(); advance() }.buttonStyle(PrimaryButtonStyle())
+                Button("Enter a location") { choosingLocation = true }.frame(minHeight: 44)
+                Button("I'll add a location later", action: advance).frame(minHeight: 44).foregroundStyle(.secondary)
+            }
+        case 2:
+            VStack(spacing: 18) {
+                NavigationLink("Read Terms of Service and Privacy Policy") { LegalView() }
+                Toggle("I agree to the Terms of Service", isOn: $terms)
+                Toggle("I agree to the Privacy Policy", isOn: $privacy)
+            }.resilioCard()
+        case 3:
+            VStack(alignment: .leading, spacing: 16) {
+                Label("Your health information is optional.", systemImage: "heart.text.square").font(.headline)
+                Text("Resilio only considers information you voluntarily provide. You can use it without adding medical conditions, medications, mental health information, or other health details.")
+                Text("You can edit or remove these details later. Resilio does not access medical records or Apple Health.").foregroundStyle(.secondary)
+            }.resilioCard()
+        default:
+            VStack(alignment: .leading, spacing: 16) {
+                ForEach(app.profiles.profiles) { profile in
+                    Button { app.profiles.select(profile.id) } label: { ProfileCard(profile: profile, selected: profile.id == app.profiles.selectedProfileID) }.buttonStyle(.plain)
+                }
+                Button("Create a profile", systemImage: "person.badge.plus") { creatingProfile = true }.frame(minHeight: 44)
+                Button("Try Maya, a demo profile") { app.profiles.addSampleProfiles() }.font(.subheadline).frame(minHeight: 44)
+            }.resilioCard()
+        }
+    }
+    var title: String { ["A little planning.\nA better day.", "Your day starts here.", "A clear agreement.", "You're in control.", "Who are you planning for?"][min(step, 4)] }
+    var bodyText: String { ["Plan your day around the environment. Explore lower-exposure options that fit your real life.", "Use your location to see nearby air quality and heat. You can also enter a location yourself.", "Review the terms and privacy policy before continuing.", "Share only what feels right for you.", "Create a profile for yourself or someone you care for."][min(step, 4)] }
+    func advance() {
+        if step == 2 { UserDefaults.standard.set(Date(), forKey: "legalAcceptedAt"); UserDefaults.standard.set("1", forKey: "legalVersion") }
+        if step < 4 { step += 1 } else { app.finishOnboarding() }
+    }
 }
-struct LegalView:View{var body:some View{List{Section("Terms of Service"){Text("Exposure Navigator provides planning information, not medical advice. Forecasts and modeled estimates can be incomplete or change. You make all decisions about your plans.")}Section("Privacy"){Text("Profiles, optional health details, and plans are stored on this device. Environmental services receive only coordinates and time needed for forecasts.")}}.navigationTitle("Terms & Privacy")}}
+
+struct LegalView: View {
+    var body: some View {
+        List {
+            Section("Terms of Service · version 1") {
+                Text("Resilio provides environmental planning information, not medical advice. It does not determine whether an activity is safe for you. You choose whether and how to change your plans.")
+                Text("Forecasts and modeled estimates can be incomplete or change. Service availability depends on external providers. No environmental or health outcome is guaranteed.")
+            }
+            Section("Privacy Policy · version 1") {
+                Text("Profiles, optional health details, and plans are stored on this device in protected app files. They are not sent to environmental services. Device backups may include app data according to your device settings.")
+                Text("Address searches are sent to Apple Maps. Environmental requests send coordinates to Open-Meteo. These providers also receive normal network connection information. Location permission is optional.")
+                Text("The plan assistant in this version runs locally. No medical records or Apple Health data are accessed. If you connect Apple Calendar, events are read on this device. Export occurs only when you explicitly save in the Apple Calendar editor.")
+                Text("You can remove health information in Edit Profile, delete plans in Calendar, and change location and calendar permissions in iOS Settings. Deleting a profile also deletes its Resilio plans after confirmation. External calendar copies are separate.")
+                Link("Apple privacy policy", destination: URL(string: "https://www.apple.com/legal/privacy/")!)
+                Link("Open-Meteo privacy policy", destination: URL(string: "https://open-meteo.com/en/terms")!)
+            }
+        }.navigationTitle("Terms & privacy").navigationBarTitleDisplayMode(.inline)
+    }
+}

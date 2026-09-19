@@ -1,6 +1,33 @@
 import SwiftUI
-struct AIPlannerView:View{@Environment(AppState.self)private var app;@Environment(\.dismiss)private var dismiss;@State private var message="";@State private var draft=PlanDraft();@State private var response="Tell me what you're planning, including who, when, and for how long.";@State private var parsed=false
- var body:some View{NavigationStack{VStack(spacing:16){ScrollView{VStack(alignment:.leading,spacing:12){Text(response).padding().background(.quaternary,in:RoundedRectangle(cornerRadius:8));if parsed{DraftSummary(draft:draft)}}.frame(maxWidth:.infinity,alignment:.leading)};HStack{TextField("Describe your plan",text:$message,axis:.vertical).textFieldStyle(.roundedBorder);Button{parse()}label:{Image(systemName:"arrow.up.circle.fill").font(.title)}};if parsed{Button("Continue to Schedule"){app.scheduleDraft=draft;app.selectedTab = .schedule;dismiss()}.buttonStyle(.borderedProminent).frame(maxWidth:.infinity)}}.padding().navigationTitle("Plan with AI").navigationBarTitleDisplayMode(.inline).toolbar{Button("Close"){dismiss()}}}}
- func parse(){let lower=message.lowercased();if let p=app.profiles.profiles.first(where:{lower.contains($0.name.lowercased())}){draft.profileID=p.id};if lower.contains("soccer"){draft.activityName="Soccer practice";draft.activityType=.sports}else if lower.contains("doctor"){draft.activityName="Doctor appointment";draft.activityType=.appointment}else{draft.activityName=message};if lower.contains("tomorrow"){draft.startTime=Calendar.current.date(byAdding:.day,value:1,to:Date()) ?? Date()};if lower.contains("6") {draft.startTime=Calendar.current.date(bySettingHour:18,minute:0,second:0,of:draft.startTime) ?? draft.startTime};if lower.contains("hour and a half")||lower.contains("90") {draft.durationMinutes=90};parsed=true;response=draft.profileID==nil ? "Who is this plan for? You can choose a profile on the next screen.":"Where will it happen, and could the start time move? Add those details on the schedule screen."}
+
+struct AIPlannerView: View {
+    @Environment(AppState.self) private var app
+    @Environment(\.dismiss) private var dismiss
+    @State private var message = ""
+    @State private var parsed: ParsedPlan?
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    Image(systemName: "sparkles").font(.largeTitle).foregroundStyle(ResilioTheme.tint)
+                    Text("What's the plan?").font(.largeTitle.bold())
+                    Text("Tell us who, what, and when. Then review the details before checking exposure.").foregroundStyle(.secondary)
+                    Text("On-device assistant · Hosted AI is not configured. This version extracts simple plans locally; it may miss details.").font(.caption).foregroundStyle(.secondary)
+                    TextField("Maya has soccer practice tomorrow at 6 pm for an hour and a half.", text: $message, axis: .vertical)
+                        .lineLimit(4...8).padding(16).background(ResilioTheme.surface, in: RoundedRectangle(cornerRadius: 18))
+                    Button("Create a draft") { parsed = LocalPlanAssistant().extract(message, profiles: app.profiles.profiles, now: Date()) }.buttonStyle(PrimaryButtonStyle()).disabled(message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    if let parsed {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Let's fill in the details.").font(.headline)
+                            if !parsed.draft.activityName.isEmpty { Text(parsed.draft.activityName).font(.title3.bold()) }
+                            if let profile = app.profiles.profiles.first(where: { $0.id == parsed.draft.profileID }) { Text("For \(profile.name)") }
+                            ForEach(parsed.missing, id: \.self) { Text($0).font(.subheadline).foregroundStyle(.secondary) }
+                        }.resilioCard()
+                        Button("Review in Schedule") { app.scheduleDraft = parsed.draft; app.selectedTab = .schedule; dismiss() }.buttonStyle(PrimaryButtonStyle())
+                    }
+                }.padding(24)
+            }.background(ResilioTheme.background).navigationTitle("Plan with AI").navigationBarTitleDisplayMode(.inline)
+                .toolbar { Button("Close") { dismiss() } }
+        }
+    }
 }
-struct DraftSummary:View{let draft:PlanDraft;var body:some View{VStack(alignment:.leading,spacing:6){Text(draft.activityName.isEmpty ? "New plan":draft.activityName).font(.headline);Text(draft.startTime.formatted(date:.abbreviated,time:.shortened));Text("\(draft.durationMinutes) minutes")}.padding().frame(maxWidth:.infinity,alignment:.leading).overlay(RoundedRectangle(cornerRadius:8).stroke(.quaternary))}}

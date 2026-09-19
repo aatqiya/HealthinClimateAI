@@ -1,12 +1,60 @@
 import Foundation
 
-enum AlternativeChange:Equatable { case timeShift(minutes:Int) }
-struct Alternative:Identifiable,Equatable { let id=UUID();var change:AlternativeChange;var assessment:ExposureAssessment;var reductionPercentByPollutant:[ExposureMetric.Pollutant:Double];func reductionPercent(for p:ExposureMetric.Pollutant)->Double?{reductionPercentByPollutant[p]};static func ==(l:Self,r:Self)->Bool{l.id==r.id} }
-struct CounterfactualResult { var original:ExposureAssessment;var alternatives:[Alternative];var bestMeaningful:Alternative?;var primaryPollutant:ExposureMetric.Pollutant?;var hadCandidates:Bool }
+enum AlternativeChange: Equatable { case timeShift(minutes: Int) }
+struct Alternative: Identifiable, Equatable {
+    let id = UUID()
+    var change: AlternativeChange
+    var assessment: ExposureAssessment
+    var reductionPercentByPollutant: [ExposureMetric.Pollutant: Double]
+    func reductionPercent(for pollutant: ExposureMetric.Pollutant) -> Double? { reductionPercentByPollutant[pollutant] }
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.id == rhs.id }
+}
+struct CounterfactualResult {
+    var original: ExposureAssessment
+    var alternatives: [Alternative]
+    var bestMeaningful: Alternative?
+    var primaryPollutant: ExposureMetric.Pollutant?
+    var hadCandidates: Bool
+}
 enum CounterfactualEngine {
- static let minimumMeaningfulDifferencePercent=10.0, candidateStepMinutes=15.0
- static func evaluate(plan:ActivityPlan,series:EnvironmentalTimeSeries)->CounterfactualResult { let original=ExposureEngine.assess(series:series,start:plan.startTime,durationMinutes:plan.durationMinutes);let primary:ExposureMetric.Pollutant?=original.metric(.pm25) != nil ? .pm25 : (original.metric(.heat) != nil ? .heat:nil);var starts:[Date]=[];switch plan.constraints.timeFlexibility{case .fixed:break;case .halfHour,.oneHour:let f=plan.constraints.timeFlexibility.minutes;for m in stride(from:-f,through:f,by:15) where m != 0{starts.append(plan.startTime.addingTimeInterval(Double(m*60)))};case .flexible:if let e=plan.constraints.earliestStart,let l=plan.constraints.latestStart{var d=e;while d<=l{if abs(d.timeIntervalSince(plan.startTime))>60{starts.append(d)};d=d.addingTimeInterval(candidateStepMinutes*60)}}}
- var options=starts.compactMap{start->Alternative? in let a=ExposureEngine.assess(series:series,start:start,durationMinutes:plan.durationMinutes);guard !a.metrics.isEmpty else{return nil};var reductions:[ExposureMetric.Pollutant:Double]=[:];for(p,m)in a.metrics{if let b=original.metric(p),b.exposure>0{reductions[p]=(b.exposure-m.exposure)/b.exposure*100}};return .init(change:.timeShift(minutes:Int(start.timeIntervalSince(plan.startTime)/60)),assessment:a,reductionPercentByPollutant:reductions)}
- if let p=primary{options.sort{($0.reductionPercent(for:p) ?? -.infinity)>($1.reductionPercent(for:p) ?? -.infinity)}};let useful=Array(options.filter{guard let p=primary,let v=$0.reductionPercent(for:p) else{return false};return v>=minimumMeaningfulDifferencePercent}.prefix(5));return .init(original:original,alternatives:useful,bestMeaningful:useful.first,primaryPollutant:primary,hadCandidates:!starts.isEmpty)
- }
+    // A product threshold for displaying changes, not a clinical significance threshold.
+    static let minimumMeaningfulDifferencePercent = 10.0
+    static let candidateStepMinutes = 15.0
+    static func evaluate(plan: ActivityPlan, series: EnvironmentalTimeSeries, now: Date = Date()) -> CounterfactualResult {
+        let original = ExposureEngine.assess(series: series, start: plan.startTime, durationMinutes: plan.durationMinutes)
+        // Celsius ratios depend on the arbitrary temperature scale. Never call them
+        // percent exposure reductions. Particle comparisons require complete coverage.
+        let primary: ExposureMetric.Pollutant? = original.metric(.pm25)?.dataCoverage ?? 0 >= 0.999 ? .pm25 : nil
+        var starts: [Date] = []
+        switch plan.constraints.timeFlexibility {
+        case .fixed: break
+        case .halfHour, .oneHour:
+            let minutes = plan.constraints.timeFlexibility.minutes
+            for offset in stride(from: -minutes, through: minutes, by: 15) where offset != 0 {
+                starts.append(plan.startTime.addingTimeInterval(Double(offset * 60)))
+            }
+        case .flexible:
+            if let earliest = plan.constraints.earliestStart, let latest = plan.constraints.latestStart, earliest <= latest, latest.timeIntervalSince(earliest) <= 86400 {
+                var date = earliest
+                while date <= latest {
+                    if abs(date.timeIntervalSince(plan.startTime)) > 60 { starts.append(date) }
+                    date = date.addingTimeInterval(candidateStepMinutes * 60)
+                }
+            }
+        }
+        var options = starts.filter { $0 >= now }.compactMap { start -> Alternative? in
+            guard let primary, let baseline = original.metric(primary), baseline.exposure > 0 else { return nil }
+            let assessment = ExposureEngine.assess(series: series, start: start, durationMinutes: plan.durationMinutes)
+            guard let metric = assessment.metric(primary), metric.dataCoverage >= 0.999 else { return nil }
+            let reduction = (baseline.exposure - metric.exposure) / baseline.exposure * 100
+            guard reduction >= minimumMeaningfulDifferencePercent else { return nil }
+            return Alternative(change: .timeShift(minutes: Int(start.timeIntervalSince(plan.startTime) / 60)), assessment: assessment, reductionPercentByPollutant: [primary: reduction])
+        }
+        options.sort {
+            let left = $0.reductionPercent(for: .pm25) ?? 0, right = $1.reductionPercent(for: .pm25) ?? 0
+            return abs(left - right) < 0.001 ? abs($0.assessment.start.timeIntervalSince(plan.startTime)) < abs($1.assessment.start.timeIntervalSince(plan.startTime)) : left > right
+        }
+        let useful = Array(options.prefix(5))
+        return .init(original: original, alternatives: useful, bestMeaningful: useful.first, primaryPollutant: primary, hadCandidates: !starts.isEmpty)
+    }
 }

@@ -3,19 +3,48 @@ import Observation
 
 @Observable
 final class ProfileStore {
-    private(set) var profiles:[UserProfile]=[]
-    var selectedProfileID:UUID? { didSet { saveSelection() } }
-    private let fileURL:URL
-    init(filename:String="profiles-v2.json") { let d=FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask)[0]; try? FileManager.default.createDirectory(at:d,withIntermediateDirectories:true); fileURL=d.appendingPathComponent(filename); load(); selectedProfileID=UUID(uuidString:UserDefaults.standard.string(forKey:"selectedProfileID") ?? "") ?? profiles.first?.id }
-    var selectedProfile:UserProfile? { profiles.first{$0.id==selectedProfileID} }
-    func select(_ id:UUID){ selectedProfileID=id }
-    func add(_ p:UserProfile){ profiles.append(p); selectedProfileID=p.id; save() }
-    func update(_ p:UserProfile){ guard let i=profiles.firstIndex(where:{$0.id==p.id}) else{return}; var x=p;x.updatedAt=Date();profiles[i]=x;save() }
-    func delete(_ p:UserProfile){ profiles.removeAll{$0.id==p.id}; if selectedProfileID==p.id {selectedProfileID=profiles.first?.id}; save() }
-    func addSampleProfiles(){ let p=UserProfile(name:"Maya",relationship:.child,age:12,homeZipCode:"10044",medicalConditions:["Asthma"],source:.synthetic); if !profiles.contains(where:{$0.name==p.name}){profiles.append(p)}; selectedProfileID=p.id;save() }
-    private func load(){ guard let d=try? Data(contentsOf:fileURL),let p=try? JSONDecoder.appDecoder.decode([UserProfile].self,from:d) else{return};profiles=p }
-    private func save(){ if let d=try? JSONEncoder.appEncoder.encode(profiles){try? d.write(to:fileURL,options:.atomic)} }
-    private func saveSelection(){ UserDefaults.standard.set(selectedProfileID?.uuidString,forKey:"selectedProfileID") }
+    private(set) var profiles: [UserProfile] = []
+    var storageError: String?
+    var selectedProfileID: UUID? { didSet { UserDefaults.standard.set(selectedProfileID?.uuidString, forKey: "selectedProfileID") } }
+    private let fileURL: URL
+    private var loadFailed = false
+
+    init(filename: String = "profiles-v2.json", directory: URL? = nil) {
+        let directory = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        fileURL = directory.appendingPathComponent(filename)
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                profiles = try JSONDecoder.appDecoder.decode([UserProfile].self, from: Data(contentsOf: fileURL))
+            }
+        } catch { loadFailed = true; storageError = "Your saved profiles couldn't be opened. They have not been overwritten." }
+        let saved = UUID(uuidString: UserDefaults.standard.string(forKey: "selectedProfileID") ?? "")
+        selectedProfileID = profiles.contains(where: { $0.id == saved }) ? saved : profiles.first?.id
+    }
+    var selectedProfile: UserProfile? { profiles.first { $0.id == selectedProfileID } }
+    func select(_ id: UUID) { if profiles.contains(where: { $0.id == id }) { selectedProfileID = id } }
+    func add(_ profile: UserProfile) {
+        if persist(profiles + [profile]) { selectedProfileID = profile.id }
+    }
+    func update(_ profile: UserProfile) {
+        var updated = profiles
+        guard let index = updated.firstIndex(where: { $0.id == profile.id }) else { return }
+        updated[index] = profile; updated[index].updatedAt = Date(); _ = persist(updated)
+    }
+    func delete(_ profile: UserProfile) {
+        if persist(profiles.filter { $0.id != profile.id }), selectedProfileID == profile.id { selectedProfileID = profiles.first?.id }
+    }
+    func addSampleProfiles() {
+        if let existing = profiles.first(where: { $0.source == .synthetic && $0.name == "Maya" }) { select(existing.id); return }
+        add(UserProfile(name: "Maya", relationship: .child, age: 12, homeZipCode: "10044", medicalConditions: ["Asthma"], source: .synthetic))
+    }
+    @discardableResult private func persist(_ updated: [UserProfile]) -> Bool {
+        guard !loadFailed else { storageError = "Existing data could not be read. Restart after recovering the saved file before making changes."; return false }
+        do {
+            try JSONEncoder.appEncoder.encode(updated).write(to: fileURL, options: [.atomic, .completeFileProtection])
+            profiles = updated; storageError = nil; return true
+        } catch { storageError = "Couldn't save profiles on this device. Please try again."; return false }
+    }
 }
-extension JSONEncoder { static var appEncoder:JSONEncoder { let e=JSONEncoder();e.dateEncodingStrategy = .iso8601;return e } }
-extension JSONDecoder { static var appDecoder:JSONDecoder { let d=JSONDecoder();d.dateDecodingStrategy = .iso8601;return d } }
+extension JSONEncoder { static var appEncoder: JSONEncoder { let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601; return encoder } }
+extension JSONDecoder { static var appDecoder: JSONDecoder { let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601; return decoder } }

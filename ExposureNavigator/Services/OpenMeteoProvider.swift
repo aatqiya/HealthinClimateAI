@@ -33,6 +33,7 @@ struct OpenMeteoProvider: EnvironmentalDataProviding {
             merged[date] = EnvironmentalSample(
                 timestamp: date,
                 pm25: values.pm25,
+                usAQI: values.aqi,
                 ozone: values.ozone
             )
         }
@@ -68,7 +69,7 @@ struct OpenMeteoProvider: EnvironmentalDataProviding {
 
     // MARK: - Air quality
 
-    private struct AirValues { var pm25: Double?; var ozone: Double? }
+    private struct AirValues { var pm25: Double?; var aqi: Double?; var ozone: Double? }
 
     private func fetchAirQuality(latitude: Double, longitude: Double) async throws
         -> (values: [Date: AirValues], timeZone: String)
@@ -77,26 +78,28 @@ struct OpenMeteoProvider: EnvironmentalDataProviding {
         components.queryItems = [
             .init(name: "latitude", value: String(latitude)),
             .init(name: "longitude", value: String(longitude)),
-            .init(name: "hourly", value: "pm2_5,ozone"),
+            .init(name: "hourly", value: "pm2_5,ozone,us_aqi"),
             .init(name: "timezone", value: "auto"),
+            .init(name: "timeformat", value: "unixtime"),
             .init(name: "forecast_days", value: "3"),
             .init(name: "past_days", value: "1")
         ]
         let json = try await getJSON(components.url)
         guard let hourly = json["hourly"] as? [String: Any],
-              let times = hourly["time"] as? [String],
+              let times = hourly["time"] as? [Double],
               let timeZoneID = json["timezone"] as? String
         else { throw EnvironmentalDataError.malformedResponse }
 
         let pm25 = hourly["pm2_5"] as? [Double?] ?? []
+        let aqi = hourly["us_aqi"] as? [Double?] ?? []
         let ozone = hourly["ozone"] as? [Double?] ?? []
-        let formatter = Self.makeFormatter(timeZoneID: timeZoneID)
 
         var out: [Date: AirValues] = [:]
         for (index, raw) in times.enumerated() {
-            guard let date = formatter.date(from: raw) else { continue }
+            let date = Date(timeIntervalSince1970: raw)
             out[date] = AirValues(
                 pm25: index < pm25.count ? pm25[index] : nil,
+                aqi: index < aqi.count ? aqi[index] : nil,
                 ozone: index < ozone.count ? ozone[index] : nil
             )
         }
@@ -123,12 +126,13 @@ struct OpenMeteoProvider: EnvironmentalDataProviding {
             .init(name: "longitude", value: String(longitude)),
             .init(name: "hourly", value: "temperature_2m,apparent_temperature,relative_humidity_2m,uv_index,precipitation_probability"),
             .init(name: "timezone", value: "auto"),
+            .init(name: "timeformat", value: "unixtime"),
             .init(name: "forecast_days", value: "3"),
             .init(name: "past_days", value: "1")
         ]
         let json = try await getJSON(components.url)
         guard let hourly = json["hourly"] as? [String: Any],
-              let times = hourly["time"] as? [String],
+              let times = hourly["time"] as? [Double],
               let timeZoneID = json["timezone"] as? String
         else { throw EnvironmentalDataError.malformedResponse }
 
@@ -137,11 +141,10 @@ struct OpenMeteoProvider: EnvironmentalDataProviding {
         let humidity = hourly["relative_humidity_2m"] as? [Double?] ?? []
         let uvIndex = hourly["uv_index"] as? [Double?] ?? []
         let precipitation = hourly["precipitation_probability"] as? [Double?] ?? []
-        let formatter = Self.makeFormatter(timeZoneID: timeZoneID)
 
         var out: [Date: WeatherValues] = [:]
         for (index, raw) in times.enumerated() {
-            guard let date = formatter.date(from: raw) else { continue }
+            let date = Date(timeIntervalSince1970: raw)
             out[date] = WeatherValues(
                 temperature: index < temperature.count ? temperature[index] : nil,
                 apparentTemperature: index < apparent.count ? apparent[index] : nil,
@@ -154,18 +157,6 @@ struct OpenMeteoProvider: EnvironmentalDataProviding {
     }
 
     // MARK: - Plumbing
-
-    /// Open-Meteo returns local wall-clock strings ("2026-09-19T18:00") in the
-    /// location's own time zone. We parse them against that zone rather than
-    /// the device zone.
-    private static func makeFormatter(timeZoneID: String) -> DateFormatter {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.timeZone = TimeZone(identifier: timeZoneID) ?? TimeZone(secondsFromGMT: 0)
-        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm"
-        return formatter
-    }
 
     private func getJSON(_ url: URL?) async throws -> [String: Any] {
         guard let url else { throw EnvironmentalDataError.invalidLocation }

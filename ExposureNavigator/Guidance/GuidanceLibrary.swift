@@ -9,20 +9,10 @@ struct GuidanceItem: Identifiable {
 }
 
 enum GuidanceLibrary {
-    static func pm25Band(_ concentration: Double) -> String {
-        switch concentration {
-        case ..<9.1: "Good"
-        case ..<35.5: "Moderate"
-        case ..<55.5: "Elevated for some people"
-        case ..<125.5: "Elevated"
-        default: "Very elevated"
-        }
-    }
-
     static func items(profile: UserProfile, plan: ActivityPlan, pm25Mean: Double?, apparentTemperatureC: Double?) -> [GuidanceItem] {
         var items: [GuidanceItem] = []
-        if let pm25Mean {
-            items.append(.init(title: "Air quality guidance", body: "The forecast for this plan is in the \(pm25Band(pm25Mean)) fine-particle range. AirNow explains practical ways to reduce exposure when particle levels rise.", source: "U.S. EPA / AirNow", url: "https://www.airnow.gov/aqi/aqi-basics/"))
+        if pm25Mean != nil {
+            items.append(.init(title: "Air quality guidance", body: "This plan uses forecast fine-particle concentrations. AirNow explains practical ways to reduce exposure when particle levels rise. An hourly concentration is not itself an official daily air-quality category.", source: "U.S. EPA / AirNow", url: "https://www.airnow.gov/aqi/aqi-basics/"))
             let respiratory = profile.medicalConditions.contains { value in
                 ["asthma", "copd", "lung", "bronchiectasis", "cystic fibrosis"].contains { value.localizedCaseInsensitiveContains($0) }
             }

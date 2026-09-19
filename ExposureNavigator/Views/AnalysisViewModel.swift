@@ -15,7 +15,7 @@ final class AnalysisViewModel {
 
     private let provider: EnvironmentalDataProviding
 
-    init(provider: EnvironmentalDataProviding = OpenMeteoProvider()) {
+    init(provider: EnvironmentalDataProviding = ForecastRepository.shared) {
         self.provider = provider
     }
 
@@ -24,8 +24,7 @@ final class AnalysisViewModel {
     func analyze(plan: ActivityPlan) async {
         state = .loading
 
-        let padding = TimeInterval(max(plan.constraints.timeFlexibilityMinutes, 0) * 60 + 3600)
-        let range = plan.startTime.addingTimeInterval(-padding)...plan.endTime.addingTimeInterval(padding)
+        let range = plan.startTime...plan.endTime
 
         do {
             let series = try await provider.fetchConditions(
