@@ -73,7 +73,15 @@ struct HomeView: View {
                             Text(sample.pm25.map { "Fine particle pollution (PM2.5): \(Int($0.rounded())) µg/m³" } ?? "Fine particle pollution unavailable")
                             Text("App checked: \((app.environment.lastCheckedAt ?? cached.checkedAt).formatted(date: .omitted, time: .shortened))")
                             Text("Forecast retrieved: \(cached.series.fetchedAt.formatted(date: .abbreviated, time: .shortened))")
-                            Text("Source update time is not supplied. These are hourly forecasts, not live sensor readings.")
+                            Text("Source: \(cached.series.source)")
+                            if let site = cached.series.observedPM25Site {
+                                Text("Nearest NYC street-level PM2.5 monitor: \(site). Readings are preliminary and do not rank nearby routes.")
+                                if let url = cached.series.observationAttributionURL.flatMap(URL.init(string:)) {
+                                    Link("NYC DOHMH · Queens College monitors", destination: url)
+                                }
+                            } else {
+                                Text("Source update time is not supplied. These are hourly forecasts unless a NYC monitor reading is available for that hour.")
+                            }
                             Link("Open-Meteo · CAMS air quality & weather", destination: URL(string: "https://open-meteo.com/en/docs/air-quality-api")!)
                         }.font(.caption).foregroundStyle(.secondary).padding(.top, 8)
                     }.font(.caption)

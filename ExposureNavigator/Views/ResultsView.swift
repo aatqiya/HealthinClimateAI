@@ -59,8 +59,14 @@ struct ResultsView: View {
                             Text("Heat and air quality can move in different directions. Check both when choosing a time.")
                             Text("Route comparisons do not estimate street-level pollution differences.")
                             Text("Source: \(series.source)")
+                            if let site = series.observedPM25Site {
+                                Text("Past hours may use the nearest NYC street-level monitor (\(site)). Future hours stay on the forecast. This is not a block-level or route ranking.")
+                                if let url = series.observationAttributionURL.flatMap(URL.init(string:)) {
+                                    Link("NYC DOHMH · Queens College monitors", destination: url)
+                                }
+                            }
                             Text("Retrieved: \(series.fetchedAt.formatted())")
-                            Text("Source update time: not supplied by provider")
+                            Text("Forecast source update time: not supplied by provider")
                             Link("Open-Meteo & CAMS sources", destination: URL(string: "https://open-meteo.com/en/docs/air-quality-api")!)
                         }.font(.subheadline)
                     }

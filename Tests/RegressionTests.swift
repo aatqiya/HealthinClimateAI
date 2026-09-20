@@ -180,7 +180,50 @@ struct RegressionTests {
         check(voiceSession.draft.activityType == .exercise && voicePlaces.lookups == 0, "voice planning_turn uses the on-device agent")
         voiceSession = await broker.dispatch("planning_turn", payload: "{\"message\":\"which route is safer?\"}", session: voiceSession)
         check(voiceSession.messages.last?.text.contains("can't pick a cleaner path") == true, "voice tools refuse route ranking")
+
+        check(NYCMonitorCatalog.contains(latitude: 40.76, longitude: -73.95), "Roosevelt Island is inside the NYC monitor box")
+        check(!NYCMonitorCatalog.contains(latitude: 42.36, longitude: -71.06), "Boston is outside the NYC monitor box")
+        check(NYCMonitorCatalog.nearest(latitude: 40.76, longitude: -73.95)?.name == "Queensboro Bridge", "nearest monitor uses published site coordinates")
+        let csv = "SiteName,Operator,starttime,timeofday,Value \nQueensboro Bridge,nyccas,2026-09-11 18:00:00.000,06:00 PM,12.5 \nBQE,nyccas,2026-09-11 18:00:00.000,06:00 PM,4.4 \nQueensboro Bridge,nyccas,2026-09-11 19:00:00.000,07:00 PM,\n"
+        let nycReadings = NYCMonitorCSV.parse(csv, timeZone: TimeZone(identifier: "America/New_York")!)
+        check(nycReadings.count == 2 && nycReadings.contains { $0.siteName == "Queensboro Bridge" && $0.pm25 == 12.5 }, "CSV parser keeps published values and skips empty hours")
+        let site = NYCMonitorSite(name: "Queensboro Bridge", latitude: 40.76123, longitude: -73.96389)
+        let observedHours = NYCMonitorCSV.hours(from: nycReadings, site: site)
+        check(observedHours.count == 1, "empty monitor hours are omitted, not invented")
+        let forecastHour = nycReadings.first { $0.siteName == "Queensboro Bridge" }!.start
+        let forecastOnly = series([
+            EnvironmentalSample(timestamp: forecastHour, pm25: 10, ozone: 20, apparentTemperatureC: 28),
+            EnvironmentalSample(timestamp: forecastHour.addingTimeInterval(3600), pm25: 11, ozone: 21, apparentTemperatureC: 27)
+        ])
+        let merged = NYCObservationMerge.apply(forecast: forecastOnly, site: site, hours: observedHours)
+        let mergedOriginal = merged.samples.first { $0.timestamp == forecastHour }!
+        let mergedNext = merged.samples.first { $0.timestamp == forecastHour.addingTimeInterval(3600) }!
+        check(mergedOriginal.pm25 == 12.5, "NYC overlay replaces PM2.5 for matching hours")
+        check(mergedOriginal.ozone == 20 && mergedOriginal.apparentTemperatureC == 28, "NYC overlay does not invent ozone or heat")
+        check(mergedNext.pm25 == 11, "hours without a monitor reading keep the forecast")
+        check(merged.observedPM25Site == "Queensboro Bridge", "merged series names the monitor")
+        let nyc = CountingNYCObserver()
+        let boston = try await MergedEnvironmentalProvider(forecast: CountingProvider(series: forecastOnly), observations: nyc).fetchConditions(latitude: 42.36, longitude: -71.06, range: forecastHour...forecastHour.addingTimeInterval(3600))
+        check(boston.observedPM25Site == nil && nyc.count == 0, "locations outside NYC never request monitors")
+        nyc.result = (site, observedHours)
+        let inCity = try await MergedEnvironmentalProvider(forecast: CountingProvider(series: forecastOnly), observations: nyc).fetchConditions(latitude: 40.76, longitude: -73.95, range: forecastHour...forecastHour.addingTimeInterval(3600))
+        check(inCity.observedPM25Site == "Queensboro Bridge" && nyc.count == 1, "NYC plans overlay the nearest monitor")
+        nyc.shouldFail = true
+        let fallback = try await MergedEnvironmentalProvider(forecast: CountingProvider(series: forecastOnly), observations: nyc).fetchConditions(latitude: 40.76, longitude: -73.95, range: forecastHour...forecastHour.addingTimeInterval(3600))
+        check(fallback.observedPM25Site == nil && fallback.samples.first?.pm25 == 10, "monitor failure leaves the forecast in place")
         print("\(passed) regression checks passed")
+    }
+}
+
+final class CountingNYCObserver: NYCObserving, @unchecked Sendable {
+    var count = 0
+    var shouldFail = false
+    var result: (site: NYCMonitorSite, hours: [Date: Double])?
+    func observations(latitude: Double, longitude: Double) async throws -> (site: NYCMonitorSite, hours: [Date: Double]) {
+        count += 1
+        if shouldFail { throw EnvironmentalDataError.forecastUnavailable }
+        guard let result else { throw EnvironmentalDataError.forecastUnavailable }
+        return result
     }
 }
 

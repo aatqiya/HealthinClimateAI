@@ -9,6 +9,8 @@ swiftc -module-cache-path /tmp/resilio-swift-cache \
   ExposureNavigator/Guidance/*.swift \
   ExposureNavigator/Services/EnvironmentalDataProviding.swift \
   ExposureNavigator/Services/OpenMeteoProvider.swift \
+  ExposureNavigator/Services/NYCMonitorCatalog.swift \
+  ExposureNavigator/Services/NYCMonitorProvider.swift \
   ExposureNavigator/Services/ForecastRepository.swift \
   ExposureNavigator/Services/IntegrationServices.swift \
   ExposureNavigator/Services/LocalPlanAssistant.swift \

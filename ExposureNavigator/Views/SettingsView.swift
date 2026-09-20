@@ -18,6 +18,8 @@ struct SettingsView: View {
             Section("Calendar connections") { CalendarConnectionsView() }
             Section("Services") {
                 LabeledContent("Address search", value: "Apple Maps")
+                LabeledContent("Forecast", value: "Open-Meteo")
+                LabeledContent("NYC PM2.5 monitors", value: "NYC DOHMH / Queens College")
                 LabeledContent("Google Maps & routes", value: GoogleRoutesService.isConfigured ? "Configured · not verified" : "Setup required")
                 LabeledContent("Plan assistant", value: "On-device conversation")
                 LabeledContent("Voice planner", value: LiveKitVoiceService.isConfigured ? "Configured · LiveKit tools run on this device" : "Setup required")
