@@ -60,7 +60,7 @@ struct PlanningSession {
     static func started() -> PlanningSession {
         var session = PlanningSession()
         session.messages = [
-            .assistant("What's the plan? Tell me who, what, and when. I'll look up the place, check the forecast, and suggest safer start times when the time can move.\n\nI can't rank nearby routes — the forecast is for a place, not each trail.\n\nOn-device assistant · Voice uses LiveKit if you configure it; planning tools still run here.")
+            .assistant("What's the plan? Tell me who, what, and when. I'll look up the place, check the forecast, and suggest safer start times when the time can move.\n\nI can't rank nearby routes — the forecast is for a place, not each trail.\n\nOn-device assistant · Voice uses ElevenLabs if you configure it; planning tools still run here.")
         ]
         return session
     }

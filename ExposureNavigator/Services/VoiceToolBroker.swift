@@ -1,6 +1,6 @@
 import Foundation
 
-/// Executes LiveKit agent tool calls on device. The hosted model only receives a redacted snapshot.
+/// Executes hosted voice agent tool calls on device (ElevenLabs client tools, or the legacy LiveKit RPC path). The hosted model only receives a redacted snapshot.
 struct VoiceToolBroker {
     var agent: PlanningAgent
     var profiles: [UserProfile]

@@ -20,7 +20,7 @@ struct HomeView: View {
                             }.font(.subheadline).frame(minHeight: 44)
                         }
                         Spacer(minLength: 4)
-                        Image("ResilioLogo").resizable().frame(width: 56, height: 56).clipShape(RoundedRectangle(cornerRadius: 17)).accessibilityHidden(true)
+                        ResilioLogoMark(size: 56)
                     }
                     conditions
                     hourly
@@ -63,9 +63,9 @@ struct HomeView: View {
             if let sample = currentSample {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                     ConditionCard(title: "Temperature", value: DisplayFormat.temperature(sample.temperatureC, unit: unit), detail: "Hourly forecast", icon: "thermometer.medium")
-                    ConditionCard(title: "Air quality", value: DisplayFormat.airQuality(sample.usAQI), detail: sample.usAQI.map { "US AQI · \(Int($0.rounded()))" } ?? "No reading available", icon: "aqi.medium")
+                    ConditionCard(title: "Air quality", value: DisplayFormat.airQuality(sample.usAQI), detail: sample.usAQI.map { "US AQI · \(Int($0.rounded()))" } ?? "No reading available", icon: "aqi.medium", severity: DisplayFormat.airQualityLevel(sample.usAQI))
                     ConditionCard(title: "UV", value: uvLabel(sample.uvIndex), detail: sample.uvIndex.map { "Index · \(String(format: "%.1f", $0))" } ?? "No reading available", icon: "sun.max")
-                    ConditionCard(title: "Feels like", value: DisplayFormat.temperature(sample.apparentTemperatureC, unit: unit), detail: "Heat & humidity", icon: "sun.haze")
+                    ConditionCard(title: "Feels like", value: DisplayFormat.temperature(sample.apparentTemperatureC, unit: unit), detail: DisplayFormat.heatCategory(sample.apparentTemperatureC) ?? "Heat & humidity", icon: "sun.haze", severity: DisplayFormat.heatLevel(sample.apparentTemperatureC))
                 }
                 if let cached = app.environment.current {
                     DisclosureGroup("Forecast details") {
@@ -73,15 +73,7 @@ struct HomeView: View {
                             Text(sample.pm25.map { "Fine particle pollution (PM2.5): \(Int($0.rounded())) µg/m³" } ?? "Fine particle pollution unavailable")
                             Text("App checked: \((app.environment.lastCheckedAt ?? cached.checkedAt).formatted(date: .omitted, time: .shortened))")
                             Text("Forecast retrieved: \(cached.series.fetchedAt.formatted(date: .abbreviated, time: .shortened))")
-                            Text("Source: \(cached.series.source)")
-                            if let site = cached.series.observedPM25Site {
-                                Text("Nearest NYC street-level PM2.5 monitor: \(site). Readings are preliminary and do not rank nearby routes.")
-                                if let url = cached.series.observationAttributionURL.flatMap(URL.init(string:)) {
-                                    Link("NYC DOHMH · Queens College monitors", destination: url)
-                                }
-                            } else {
-                                Text("Source update time is not supplied. These are hourly forecasts unless a NYC monitor reading is available for that hour.")
-                            }
+                            Text("Source update time is not supplied. These are hourly forecasts, not live sensor readings.")
                             Link("Open-Meteo · CAMS air quality & weather", destination: URL(string: "https://open-meteo.com/en/docs/air-quality-api")!)
                         }.font(.caption).foregroundStyle(.secondary).padding(.top, 8)
                     }.font(.caption)
@@ -155,10 +147,12 @@ struct HomeView: View {
 
 struct ConditionCard: View {
     let title, value, detail, icon: String
+    var severity: SeverityLevel? = nil
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
-            Image(systemName: icon).font(.title3).foregroundStyle(ResilioTheme.tint)
+            Image(systemName: icon).font(.title3).foregroundStyle(severity?.color ?? ResilioTheme.tint)
             Text(value).font(.system(.title2, design: .rounded, weight: .semibold)).minimumScaleFactor(0.75)
+                .foregroundStyle(severity?.color ?? .primary)
             Text(title).font(.subheadline.weight(.medium))
             Text(detail).font(.caption).foregroundStyle(.secondary)
         }.frame(maxWidth: .infinity, minHeight: 128, alignment: .leading).padding(16)

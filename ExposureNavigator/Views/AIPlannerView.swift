@@ -8,7 +8,7 @@ struct AIPlannerView: View {
     @State private var message = ""
     @State private var busy = false
     @State private var bottomID = UUID()
-    @State private var voice = VoiceSessionController()
+    @State private var voice = ElevenLabsVoiceService()
 
     var body: some View {
         NavigationStack {
@@ -117,6 +117,16 @@ struct AIPlannerView: View {
             }
             .disabled(voice.connecting)
             .accessibilityLabel(voice.isActive ? "Stop voice" : "Start voice")
+            if voice.isActive {
+                Button {
+                    voice.toggleMute()
+                } label: {
+                    Image(systemName: voice.isMuted ? "mic.slash.circle" : "mic.slash.circle.fill")
+                        .font(.system(size: 28))
+                        .foregroundStyle(voice.isMuted ? ResilioTheme.forest : .secondary)
+                }
+                .accessibilityLabel(voice.isMuted ? "Unmute microphone" : "Mute microphone")
+            }
             Button {
                 Task { await send() }
             } label: {

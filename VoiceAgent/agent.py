@@ -86,7 +86,7 @@ def voice_models() -> tuple:
 
         return (
             groq.STT(model="whisper-large-v3-turbo", language="en"),
-            groq.LLM(model=os.environ.get("RESILIO_VOICE_LLM", "llama-3.3-70b-versatile")),
+            groq.LLM(model=os.environ.get("RESILIO_VOICE_LLM", "openai/gpt-oss-120b")),
             groq.TTS(model="canopylabs/orpheus-v1-english", voice="austin"),
         )
     from livekit.plugins import openai

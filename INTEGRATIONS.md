@@ -14,28 +14,71 @@
 
 No authentication backend, account credentials, or hosted AI credentials were supplied or present in the baseline. The app uses honest local-device entry. `AccountAuthenticating` and `PlanAssisting` define replacement boundaries. Do not put server secrets in the iOS bundle. A hosted implementation needs an authenticated backend and clear data disclosures. Send only necessary request context, not entire health profiles.
 
-### LiveKit voice planner
+### ElevenLabs voice planner
 
-Text Plan with AI works on-device without accounts. Voice needs keys you paste into `VoiceAgent/.env` (never into the iOS bundle). The simulator already points at `http://127.0.0.1:8787/token`.
+Text Plan with AI works on-device without accounts. Voice needs one non-secret value — an ElevenLabs **public agent ID** — pasted into the Xcode project (never an API key). No backend or token server is required: `ElevenLabsVoiceService.swift` connects straight to ElevenLabs using the ElevenLabs Swift SDK (`https://github.com/elevenlabs/elevenlabs-swift-sdk`, package product `ElevenLabs`).
 
-The iOS client requests a short-lived room token from that endpoint, joins a LiveKit room, and registers RPC methods. The Python agent only talks and calls those methods. `PlanningAgent` still searches places, fetches forecasts, scores exposure, builds guidance, and saves events on the device. Snapshots sent back to the agent include spoken replies, missing slots, place names, and computed PM2.5/heat summaries. They never include medical conditions, medications, age, or home ZIP.
+The agent's only real job is to relay what the user says into Resilio's existing on-device planner and speak the result back. `PlanningAgent` (the same deterministic engine the text composer uses) still parses the request, searches places, fetches forecasts, scores exposure, generates alternatives, and saves events — the LLM never computes exposure or invents a number. Tool payloads sent to ElevenLabs are the same redacted `VoiceSessionSnapshot` used previously: spoken reply, missing slots, place candidates, alternatives, and guidance — never medical conditions, medications, age, or home ZIP.
 
-**What you supply (once):**
+**One-time ElevenLabs dashboard setup:**
 
-1. [LiveKit Cloud](https://cloud.livekit.io) → create a project → copy **WebSocket URL** (`wss://….livekit.cloud`), **API Key**, and **API Secret**.
-2. [Groq](https://console.groq.com/keys) (free) → create an API key. OpenAI also works if you have credits.
+1. Create a free account at [elevenlabs.io](https://elevenlabs.io) and open **Agents** → **Create an agent** → **Blank template**.
+2. **System prompt** — paste:
 
-**What you run every demo:**
+   > You are Resilio's voice planning assistant. Resilio plans outdoor activities around air quality and heat exposure.
+   >
+   > For any request to create, change, compare, or save an activity plan, call `planning_turn` with the user's message repeated verbatim — do not summarize, translate, or add anything to it. Wait for the tool result, then speak using its `spokenReply` field. You may smooth the wording for natural speech, but never add, remove, or change a number, name, time, or fact it contains. Never state a pollutant level, temperature, or percent reduction that did not come from a tool result — you must never estimate or invent one yourself.
+   >
+   > When the user is choosing one of the numbered places listed under `placeCandidates` in the last tool result (by number or by name), call `select_place` with that 1-based number.
+   >
+   > When the user is choosing one of the times listed under `alternatives` in the last tool result, or asks to keep the original time, call `choose_alternative` — 0 keeps the original start time, 1 is the first listed alternative, 2 the second, and so on.
+   >
+   > When the user clearly confirms they want the plan saved, call `save_plan`.
+   >
+   > If the user asks you to diagnose a condition, predict a health outcome, or say whether an activity is medically safe or unsafe for a person or a condition such as asthma, do not call any tool with that question and do not answer it yourself. Instead say that Resilio can't make medical safety determinations, and offer to compare modeled environmental exposure between times or locations, or share public-health guidance — then wait for their answer. Never recommend changing medication or treatment.
+   >
+   > Keep spoken replies natural but not padded — the phone shows the same text on screen. Never mention routes or trails as safer or cleaner; Resilio does not rank them.
 
-```
-cd VoiceAgent
-./start_token_server.sh    # first run copies .env; paste the four values and run again
-./start_agent.sh           # second terminal — worker named resilio-planner
-```
+3. **First message** — e.g. "Hi, I'm the Resilio planning assistant. Tell me the activity and I'll check the plan and outdoor conditions."
+4. **Tools** → add four **Client tools** (not server/webhook tools) — the app answers these locally, on-device:
 
-Then open `ExposureNavigator.xcodeproj`, run the **ExposureNavigator** scheme on the iOS Simulator, open Plan with AI, tap the mic, and allow the microphone.
+   | Tool name | Parameters | Description |
+   |---|---|---|
+   | `planning_turn` | `message` (string, required) | Send the user's exact words to Resilio's on-device planner. |
+   | `select_place` | `placeIndex` (integer, required) | Choose a numbered place from the last tool result's `placeCandidates`. |
+   | `choose_alternative` | `alternativeIndex` (integer, required) | Choose a start time from `alternatives`; 0 keeps the original. |
+   | `save_plan` | *(none)* | Save the currently selected plan after the user confirms. |
 
-Physical iPhone: set `VOICE_TOKEN_HOST=0.0.0.0` in `.env` and change `RESILIO_VOICE_ENDPOINT` to `http://YOUR_MAC_LAN_IP:8787/token`. Keys stay in `.env`. This path has not been live-tested because no LiveKit project was supplied.
+   Parameter names must match exactly (`message`, `placeIndex`, `alternativeIndex`) — the app decodes them directly into `VoiceToolPayload`.
+5. **LLM** — pick the cheapest model shown that supports tool calling (e.g. Gemini 2.0 Flash). This agent does no reasoning beyond "call a tool, then read back its result," so token usage per turn is minimal regardless of model. ElevenLabs bills LLM tokens separately from voice minutes — see cost notes below.
+6. Publish the agent, copy its **Agent ID** (not the API key), and paste it as `INFOPLIST_KEY_ELEVENLABS_AGENT_ID` in `ExposureNavigator.xcodeproj` → target **ExposureNavigator** → **Build Settings** (both Debug and Release), replacing `REPLACE_WITH_YOUR_ELEVENLABS_AGENT_ID`. A public agent ID is not a secret — ElevenLabs' own SDK guidance is to use it directly from the client. Never put your ElevenLabs **API key** in the app.
+
+**What you run every demo:** nothing extra. Open `ExposureNavigator.xcodeproj`, run the **ExposureNavigator** scheme on a device or simulator, open Plan with AI, tap the mic, and allow the microphone. There is no token server or Python process to start.
+
+**Cost / free tier:** ElevenLabs' Free plan includes 15 minutes of agent conversation per month at no cost, with LLM tokens billed separately per the model you choose. Do not enable pay-as-you-go or auto top-up in the dashboard — with both off, once the 15 minutes are used the SDK's `startConversation` call throws and `ElevenLabsVoiceService` surfaces a plain error ("Voice AI had a problem...") while every other Resilio feature, including text Plan with AI, keeps working. Test the planning/exposure/counterfactual logic itself through the text composer, not voice, to avoid spending minutes during development.
+
+**Legacy LiveKit/Groq path:** `LiveKitVoiceService.swift`, `VoiceAgent/` (Python token server + agent), and the `client-sdk-swift` package reference are no longer wired to the UI — `AIPlannerView` now uses `ElevenLabsVoiceService`. They're left in place, unused, until the ElevenLabs path has been verified end-to-end on a physical iPhone; see the implementation report for the exact removal steps.
+
+### Voice AI test matrix
+
+Most of what makes the assistant trustworthy — field collection, constraint adherence, exposure math, refusing to invent numbers, multi-turn state, save/failure handling — lives in `PlanningAgent`/`CounterfactualEngine`, which is transport-agnostic and covered by `Tests/run.sh` (67 checks, unaffected by this change). What's new and specific to ElevenLabs — whether the agent actually calls the right tool, speaks the whole reply, and holds the medical-safety line — depends on the live agent's prompt-following and can't be exercised by that script. Check both before a demo:
+
+| # | Scenario | Proven by | How to check |
+|---|---|---|---|
+| 1 | Basic voice round trip | — | Manual, physical iPhone: tap mic, say "Hello," confirm mic permission prompt, a spoken reply, and matching on-screen text. |
+| 2 | Multi-turn planning (gathers missing fields) | `Tests/run.sh`: "missing-slot questions ask who is missing", "follow-up turn fills profile and duration" | Automated; spot-check by voice once. |
+| 3 | Schedule modification ("move it 30 minutes later") | `Tests/run.sh`: "voice planning_turn uses the on-device agent" | Automated; spot-check by voice once. |
+| 4 | Constraints respected (fixed time/place never offered as alternative) | `Tests/run.sh`: "no alternatives when flexibility is fixed", "alternatives only come from CounterfactualEngine" | Automated. |
+| 5 | Exposure comparison uses real numbers | `Tests/run.sh`: "alternatives only come from CounterfactualEngine", "fixture produces time alternatives when flexibility allows" | Automated. The agent can only relay `spokenReply`/`reductionPercent` it received in a tool result — verify system prompt wording still says so before each demo. |
+| 6 | Recommendation reflects generated alternatives | `Tests/run.sh`: "complete plan with flexibility reaches recommendation" | Automated. |
+| 7 | No alternative exists (all constraints fixed) | `Tests/run.sh`: "no alternatives when flexibility is fixed" | Automated. |
+| 8 | Medical-safety boundary | — | Manual only — this is enforced entirely by the dashboard system prompt, not code. Ask "Is it safe for my asthmatic kid?" and confirm the agent declines and offers an exposure comparison instead, every time you edit the prompt. |
+| 9 | Interruption / turn-taking | — | Manual, physical iPhone: talk over the agent mid-reply and confirm it stops and listens (SDK-native VAD; no app code involved). |
+| 10 | Network / quota failure | — | Manual: turn on Airplane Mode (or exhaust the 15 free minutes) and confirm `ElevenLabsVoiceService` shows a plain error and the rest of the app, including text Plan with AI, keeps working. |
+| 11 | Missing info isn't invented | `Tests/run.sh`: "first turn extracts activity without inventing a place", "place required before fetch" | Automated. |
+| 12 | Tool grounding (numbers come from the tool, not the LLM) | `Tests/run.sh`: "voice snapshot is redacted plan state, not a route ranking", "voice snapshots omit health fields" | Automated for what's in the snapshot; manually confirm the agent didn't editorialize past `spokenReply` when you change the prompt. |
+
+Rows without an automated column are the ones that actually exercise ElevenLabs' own LLM behavior — re-run them by hand any time the system prompt changes, since nothing in this repo can regression-test another company's model.
 
 ### Google Maps / Routes
 

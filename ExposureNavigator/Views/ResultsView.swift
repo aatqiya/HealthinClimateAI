@@ -59,14 +59,8 @@ struct ResultsView: View {
                             Text("Heat and air quality can move in different directions. Check both when choosing a time.")
                             Text("Route comparisons do not estimate street-level pollution differences.")
                             Text("Source: \(series.source)")
-                            if let site = series.observedPM25Site {
-                                Text("Past hours may use the nearest NYC street-level monitor (\(site)). Future hours stay on the forecast. This is not a block-level or route ranking.")
-                                if let url = series.observationAttributionURL.flatMap(URL.init(string:)) {
-                                    Link("NYC DOHMH · Queens College monitors", destination: url)
-                                }
-                            }
                             Text("Retrieved: \(series.fetchedAt.formatted())")
-                            Text("Forecast source update time: not supplied by provider")
+                            Text("Source update time: not supplied by provider")
                             Link("Open-Meteo & CAMS sources", destination: URL(string: "https://open-meteo.com/en/docs/air-quality-api")!)
                         }.font(.subheadline)
                     }
@@ -127,9 +121,20 @@ struct GuidanceSection: View {
     let profile: UserProfile
     let plan: ActivityPlan
     let assessment: ExposureAssessment
+    var pm25: Double? { assessment.metric(.pm25)?.meanConcentration }
+    var heat: Double? { assessment.metric(.heat)?.meanConcentration }
     var body: some View {
         Section("Public-health information") {
-            ForEach(GuidanceLibrary.items(profile: profile, plan: plan, pm25Mean: assessment.metric(.pm25)?.meanConcentration, apparentTemperatureC: assessment.metric(.heat)?.meanConcentration)) { item in
+            let aqiBadge = DisplayFormat.pm25Badge(pm25)
+            let heatBadge = DisplayFormat.heatBadge(heat)
+            if aqiBadge != nil || heatBadge != nil {
+                HStack(spacing: 8) {
+                    if let aqiBadge { SeverityBadge(label: "Air quality: \(aqiBadge.label)", level: aqiBadge.level) }
+                    if let heatBadge { SeverityBadge(label: "Heat: \(heatBadge.label)", level: heatBadge.level) }
+                }
+                Text("Categories use EPA and NWS thresholds for this modeled window. Guidance below follows from whichever categories apply.").font(.caption).foregroundStyle(.secondary)
+            }
+            ForEach(GuidanceLibrary.items(profile: profile, plan: plan, pm25Mean: pm25, apparentTemperatureC: heat)) { item in
                 DisclosureGroup(item.title) { Text(item.body); if let url = URL(string: item.url) { Link(item.source, destination: url) } }
             }
         }

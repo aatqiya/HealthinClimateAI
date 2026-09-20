@@ -14,6 +14,7 @@ final class AppState {
     let environment = EnvironmentStore()
     let location = LocationManager()
     let calendars = CalendarService()
+    let health = HealthKitService()
     var manualLocation: ActivityLocation? {
         didSet { if let data = try? JSONEncoder.appEncoder.encode(manualLocation) { UserDefaults.standard.set(data, forKey: "manualLocation") } }
     }

@@ -27,4 +27,4 @@ Run `Tests/run.sh` for deterministic regression checks covering exposure integra
 
 See [IMPLEMENTATION_REPORT.md](IMPLEMENTATION_REPORT.md) for the change inventory, verified behavior, known limitations, and exact demo script. See [INTEGRATIONS.md](INTEGRATIONS.md) for available services and configuration requirements.
 
-Voice Plan with AI is optional. Paste LiveKit Cloud and OpenAI keys into `VoiceAgent/.env`, then run `VoiceAgent/start_token_server.sh` and `VoiceAgent/start_agent.sh` before tapping the mic in the simulator.
+Voice Plan with AI is optional and uses ElevenLabs. Create an agent in the ElevenLabs dashboard (see INTEGRATIONS.md), paste its Agent ID into the Xcode project's `ELEVENLABS_AGENT_ID` build setting, then tap the mic in Plan with AI — no backend process to start.
