@@ -16,6 +16,7 @@ struct SettingsView: View {
                 Button("Open iOS permissions") { if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) } }
             }
             Section("Calendar connections") { CalendarConnectionsView() }
+            Section("Health") { AppleHealthConnectionView() }
             Section("Services") {
                 LabeledContent("Address search", value: "Apple Maps")
                 LabeledContent("Google Maps & routes", value: GoogleRoutesService.isConfigured ? "Configured · not verified" : "Setup required")
@@ -31,6 +32,21 @@ struct SettingsView: View {
             Section { ResilioBrand(); Text("Version 1.0 · Plan your day with a little more context.").font(.caption).foregroundStyle(.secondary) }
         }.navigationTitle("Settings").navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $choosingLocation) { LocationPickerView { app.manualLocation = $0 } }
+    }
+}
+
+struct AppleHealthConnectionView: View {
+    @Environment(AppState.self) private var app
+    var body: some View {
+        HStack {
+            Label("Apple Health", systemImage: "heart.text.square")
+            Spacer()
+            if !HealthKitService.isAvailable { Text("Unavailable").foregroundStyle(.secondary) }
+            else if app.health.requested { Text("Permission requested").foregroundStyle(.secondary) }
+            else { Button("Connect") { Task { await app.health.requestAccess() } } }
+        }
+        Text("This only requests permission for a future update. Resilio does not read or store Apple Health data yet.").font(.caption).foregroundStyle(.secondary)
+        if let error = app.health.errorMessage { Text(error).font(.caption).foregroundStyle(.secondary) }
     }
 }
 

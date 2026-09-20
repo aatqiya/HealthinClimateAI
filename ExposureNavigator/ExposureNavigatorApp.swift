@@ -27,7 +27,7 @@ struct MainTabView: View {
         @Bindable var app = app
         TabView(selection: $app.selectedTab) {
             HomeView().tabItem { Label("Home", systemImage: "house") }.tag(AppState.Tab.home)
-            PlanBuilderView().tabItem { Label("Schedule", systemImage: "calendar.badge.plus") }.tag(AppState.Tab.schedule)
+            PlanBuilderView().tabItem { Label("Schedule", systemImage: "list.bullet.clipboard") }.tag(AppState.Tab.schedule)
             CalendarView().tabItem { Label("Calendar", systemImage: "calendar") }.tag(AppState.Tab.calendar)
             ProfilesView().tabItem { Label("Profile", systemImage: "person.crop.circle") }.tag(AppState.Tab.profile)
         }

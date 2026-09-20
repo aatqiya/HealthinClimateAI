@@ -20,7 +20,7 @@ struct HomeView: View {
                             }.font(.subheadline).frame(minHeight: 44)
                         }
                         Spacer(minLength: 4)
-                        Image("ResilioLogo").resizable().frame(width: 56, height: 56).clipShape(RoundedRectangle(cornerRadius: 17)).accessibilityHidden(true)
+                        ResilioLogoMark(size: 56)
                     }
                     conditions
                     hourly
@@ -63,9 +63,9 @@ struct HomeView: View {
             if let sample = currentSample {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                     ConditionCard(title: "Temperature", value: DisplayFormat.temperature(sample.temperatureC, unit: unit), detail: "Hourly forecast", icon: "thermometer.medium")
-                    ConditionCard(title: "Air quality", value: DisplayFormat.airQuality(sample.usAQI), detail: sample.usAQI.map { "US AQI · \(Int($0.rounded()))" } ?? "No reading available", icon: "aqi.medium")
+                    ConditionCard(title: "Air quality", value: DisplayFormat.airQuality(sample.usAQI), detail: sample.usAQI.map { "US AQI · \(Int($0.rounded()))" } ?? "No reading available", icon: "aqi.medium", severity: DisplayFormat.airQualityLevel(sample.usAQI))
                     ConditionCard(title: "UV", value: uvLabel(sample.uvIndex), detail: sample.uvIndex.map { "Index · \(String(format: "%.1f", $0))" } ?? "No reading available", icon: "sun.max")
-                    ConditionCard(title: "Feels like", value: DisplayFormat.temperature(sample.apparentTemperatureC, unit: unit), detail: "Heat & humidity", icon: "sun.haze")
+                    ConditionCard(title: "Feels like", value: DisplayFormat.temperature(sample.apparentTemperatureC, unit: unit), detail: DisplayFormat.heatCategory(sample.apparentTemperatureC) ?? "Heat & humidity", icon: "sun.haze", severity: DisplayFormat.heatLevel(sample.apparentTemperatureC))
                 }
                 if let cached = app.environment.current {
                     DisclosureGroup("Forecast details") {
@@ -147,10 +147,12 @@ struct HomeView: View {
 
 struct ConditionCard: View {
     let title, value, detail, icon: String
+    var severity: SeverityLevel? = nil
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
-            Image(systemName: icon).font(.title3).foregroundStyle(ResilioTheme.tint)
+            Image(systemName: icon).font(.title3).foregroundStyle(severity?.color ?? ResilioTheme.tint)
             Text(value).font(.system(.title2, design: .rounded, weight: .semibold)).minimumScaleFactor(0.75)
+                .foregroundStyle(severity?.color ?? .primary)
             Text(title).font(.subheadline.weight(.medium))
             Text(detail).font(.caption).foregroundStyle(.secondary)
         }.frame(maxWidth: .infinity, minHeight: 128, alignment: .leading).padding(16)
