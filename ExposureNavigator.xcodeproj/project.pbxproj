@@ -6,13 +6,31 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		A2000003 /* LiveKit in Frameworks */ = {isa = PBXBuildFile; productRef = A2000002 /* LiveKit */; };
+		A2000006 /* ElevenLabs in Frameworks */ = {isa = PBXBuildFile; productRef = A2000005 /* ElevenLabs */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		A1000007 /* ExposureNavigator.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ExposureNavigator.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A2000010 /* Exceptions for "ExposureNavigator" folder in "ExposureNavigator" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = A1000006 /* ExposureNavigator */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		A1000003 /* ExposureNavigator */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A2000010 /* Exceptions for "ExposureNavigator" folder in "ExposureNavigator" target */,
+			);
 			path = ExposureNavigator;
 			sourceTree = "<group>";
 		};
@@ -23,6 +41,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A2000003 /* LiveKit in Frameworks */,
+				A2000006 /* ElevenLabs in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -64,6 +84,10 @@
 				A1000003 /* ExposureNavigator */,
 			);
 			name = ExposureNavigator;
+			packageProductDependencies = (
+				A2000002 /* LiveKit */,
+				A2000005 /* ElevenLabs */,
+			);
 			productName = ExposureNavigator;
 			productReference = A1000007 /* ExposureNavigator.app */;
 			productType = "com.apple.product-type.application";
@@ -92,6 +116,10 @@
 			);
 			mainGroup = A1000001;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				A2000001 /* XCRemoteSwiftPackageReference "client-sdk-swift" */,
+				A2000004 /* XCRemoteSwiftPackageReference "elevenlabs-swift-sdk" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A1000002 /* Products */;
 			projectDirPath = "";
@@ -175,10 +203,14 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ExposureNavigator/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Resilio;
+				INFOPLIST_KEY_ELEVENLABS_AGENT_ID = agent_4801m2zmp9amf0brmwqbt6n02b4x;
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Connect Apple Calendar only when you choose, so your events can appear together.";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Connect Apple Health only when you choose, so future features can use it. Resilio does not read Apple Health data yet.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Use your location for nearby forecasts. Coordinates are sent to weather services; saved activity locations stay on this device.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Voice planning listens only while you turn the microphone on in Plan with AI. Speech is sent to ElevenLabs to run the conversation; health details stay on this device.";
+				INFOPLIST_KEY_RESILIO_VOICE_ENDPOINT = "http://127.0.0.1:8787/token";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -207,10 +239,14 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ExposureNavigator/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Resilio;
+				INFOPLIST_KEY_ELEVENLABS_AGENT_ID = agent_4801m2zmp9amf0brmwqbt6n02b4x;
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Connect Apple Calendar only when you choose, so your events can appear together.";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Connect Apple Health only when you choose, so future features can use it. Resilio does not read Apple Health data yet.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Use your location for nearby forecasts. Coordinates are sent to weather services; saved activity locations stay on this device.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Voice planning listens only while you turn the microphone on in Plan with AI. Speech is sent to ElevenLabs to run the conversation; health details stay on this device.";
+				INFOPLIST_KEY_RESILIO_VOICE_ENDPOINT = "http://127.0.0.1:8787/token";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -251,6 +287,38 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A2000001 /* XCRemoteSwiftPackageReference "client-sdk-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/livekit/client-sdk-swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.6.0;
+			};
+		};
+		A2000004 /* XCRemoteSwiftPackageReference "elevenlabs-swift-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/elevenlabs/elevenlabs-swift-sdk.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 3.3.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A2000002 /* LiveKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A2000001 /* XCRemoteSwiftPackageReference "client-sdk-swift" */;
+			productName = LiveKit;
+		};
+		A2000005 /* ElevenLabs */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A2000004 /* XCRemoteSwiftPackageReference "elevenlabs-swift-sdk" */;
+			productName = ElevenLabs;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = A1000000 /* Project object */;
 }

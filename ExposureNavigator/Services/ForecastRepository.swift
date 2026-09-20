@@ -7,7 +7,7 @@ actor ForecastRepository: EnvironmentalDataProviding {
     private let provider: EnvironmentalDataProviding
     private var cache: [String: EnvironmentalTimeSeries] = [:]
     private var inFlight: [String: Task<EnvironmentalTimeSeries, Error>] = [:]
-    init(provider: EnvironmentalDataProviding = OpenMeteoProvider()) { self.provider = provider }
+    init(provider: EnvironmentalDataProviding = MergedEnvironmentalProvider()) { self.provider = provider }
     func fetchConditions(latitude: Double, longitude: Double, range: ClosedRange<Date>) async throws -> EnvironmentalTimeSeries {
         let key = String(format: "%.4f,%.4f", latitude, longitude)
         if let hit = cache[key], Date().timeIntervalSince(hit.fetchedAt) < 900 { return hit }

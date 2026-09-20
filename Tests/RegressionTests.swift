@@ -105,93 +105,135 @@ struct RegressionTests {
         _ = try await repository.fetchConditions(latitude: 40, longitude: -73, range: hour...hour.addingTimeInterval(3600))
         let count = await provider.count
         check(count == 1, "simultaneous requests coalesce and minute checks reuse cached forecast")
-        // Absolute AQI grading is independent of concentration and exposure.
-        for (value, category) in [(0, AQICategory.good), (50, .good), (51, .moderate), (100, .moderate), (101, .sensitive), (150, .sensitive), (151, .unhealthy), (200, .unhealthy), (201, .veryUnhealthy), (300, .veryUnhealthy), (301, .hazardous), (700, .hazardous)] {
-            check(AQICategory.category(for: Double(value)) == category, "AQI boundary \(value)")
-        }
-        for boundary in [50.0, 100, 150, 200, 300] {
-            check(AQICategory.category(for: boundary + 0.49) == AQICategory.category(for: boundary), "AQI rounds down consistently at \(boundary)")
-            check(AQICategory.category(for: boundary + 0.5) == AQICategory.category(for: boundary + 1), "AQI rounds up consistently at \(boundary)")
-        }
-        for invalid in [Double?.none, -1, -.infinity, .infinity, .nan, Double.greatestFiniteMagnitude] {
-            check(AQICategory.reading(invalid) == nil && AQICategory.category(for: invalid) == nil, "Invalid AQI is unavailable: \(String(describing: invalid))")
-        }
-        var air = series([
-            .init(timestamp: hour, pm25: 50, usAQI: 180),
-            .init(timestamp: hour.addingTimeInterval(3600), pm25: 40, usAQI: 160),
-            .init(timestamp: hour.addingTimeInterval(7200), pm25: 40, usAQI: nil)
-        ])
-        air.fetchedAt = hour.addingTimeInterval(-3600)
-        let multiHour = AQIWindow.assess(series: air, start: hour.addingTimeInterval(1800), end: hour.addingTimeInterval(5400))
-        check(multiHour.peak == 180 && multiHour.coveredSeconds == 3600 && !multiHour.isPartial, "AQI peak spans partial overlapping hours")
-        let missingAQI = AQIWindow.assess(series: air, start: hour.addingTimeInterval(5400), end: hour.addingTimeInterval(9000))
-        check(missingAQI.peak == 160 && missingAQI.coveredSeconds == 1800 && missingAQI.isPartial, "AQI partial window does not imply full coverage")
-        check(AQIWindow.assess(series: air, start: hour, end: hour.addingTimeInterval(3600)).peak == 180, "AQI excludes hour at exact end boundary")
-        var duplicateAir = air; duplicateAir.samples.append(air.samples[0])
-        check(AQIWindow.assess(series: duplicateAir, start: hour, end: hour.addingTimeInterval(3600)).coveredSeconds == 3600, "AQI repeated hours do not inflate coverage")
-        var unhealthyPlan = plan; unhealthyPlan.startTime = hour; unhealthyPlan.durationMinutes = 60; unhealthyPlan.constraints = .init(timeFlexibility: .oneHour)
-        let unhealthyOptions = CounterfactualEngine.evaluate(plan: unhealthyPlan, series: air, now: hour.addingTimeInterval(-1))
-        check(unhealthyOptions.alternatives.contains { abs(($0.reductionPercent(for: .pm25) ?? 0) - 20) < 0.001 && $0.assessment.aqi.category == .unhealthy }, "20 percent lower particle exposure can still have Unhealthy AQI")
 
-        func savedEvent(start: Date, minutes: Int, samples: [EnvironmentalSample], owner: UUID? = nil, place: ActivityLocation? = nil) -> ActivityEvent {
-            let place = place ?? location
-            var environment = series(samples); environment.fetchedAt = start.addingTimeInterval(-3600)
-            let activity = ActivityPlan(profileID: owner ?? profile.id, activityType: .exercise, activityName: "Weekly fixture", location: place, startTime: start.addingTimeInterval(-3600), durationMinutes: minutes)
-            let snapshot = ExposureSnapshot(environmentalWindow: SavedEnvironmentalWindow(location: place, start: start, end: start.addingTimeInterval(Double(minutes) * 60), series: environment), analyzedAt: environment.fetchedAt, source: environment.source, sourceUpdatedAt: environment.fetchedAt, originalStart: activity.startTime, selectedStart: start, pm25Mean: nil, apparentTemperatureC: nil, reductionPercent: nil)
-            return ActivityEvent(plan: activity, selectedStart: start, selectedRoute: nil, analysis: snapshot, createdAt: start)
-        }
-        let weeklyEvent = savedEvent(start: hour.addingTimeInterval(1800), minutes: 120, samples: [
-            .init(timestamp: hour, pm25: 10, usAQI: 30),
-            .init(timestamp: hour.addingTimeInterval(3600), pm25: 20, usAQI: 180),
-            .init(timestamp: hour.addingTimeInterval(7200), pm25: nil, usAQI: nil)
+        let calendar = Calendar.current
+        let six = calendar.date(bySettingHour: 18, minute: 0, second: 0, of: hour) ?? hour.addingTimeInterval(18 * 3600)
+        let eveningNow = six.addingTimeInterval(-3600)
+        let eveningSeries = series((-2..<8).map { EnvironmentalSample(timestamp: six.addingTimeInterval(Double($0) * 3600), pm25: $0 == 0 ? 40 : 10, apparentTemperatureC: 28) })
+        let places = StubPlaceSearch(results: [location])
+        let sessionProvider = CountingProvider(series: eveningSeries)
+        var agent = PlanningAgent(places: places, environment: sessionProvider)
+        var session = PlanningSession.started()
+        session = await agent.handle("Schedule a run at 6pm", session: session, profiles: [profile], now: eveningNow)
+        check(session.phase == .collecting && session.draft.activityType == .exercise && session.draft.location == nil, "first turn extracts activity without inventing a place")
+        check(session.messages.contains { $0.role == .assistant && $0.text.localizedCaseInsensitiveContains("who") }, "missing-slot questions ask who is missing")
+        check(places.lookups == 0 && session.lastResult == nil, "place required before fetch")
+        let fetchesAfterFirst = await sessionProvider.count
+        check(fetchesAfterFirst == 0, "forecast is not requested before a resolved place")
+
+        session = await agent.handle("Maya today for 45 minutes", session: session, profiles: [profile], now: eveningNow)
+        check(session.draft.profileID == profile.id && session.knowledge.duration && session.draft.durationMinutes == 45, "follow-up turn fills profile and duration")
+        session = await agent.handle("near Test field", session: session, profiles: [profile], now: eveningNow)
+        check(session.draft.location == location && places.lookups == 1, "place search stores a resolved location")
+        let fetchesAfterPlace = await sessionProvider.count
+        check(fetchesAfterPlace == 0 && session.phase == .collecting, "flexibility is required before analysis")
+        check(session.messages.last?.text.localizedCaseInsensitiveContains("earlier or later") == true, "bot asks whether the start time can move")
+
+        session = await agent.handle("the time is fixed", session: session, profiles: [profile], now: eveningNow)
+        check(session.phase == .recommending && session.lastResult?.alternatives.isEmpty == true, "no alternatives when flexibility is fixed")
+        let fetchesAfterFixed = await sessionProvider.count
+        check(fetchesAfterFixed == 1, "analysis runs once the place is resolved")
+
+        let flexiblePlaces = StubPlaceSearch(results: [location])
+        let flexibleProvider = CountingProvider(series: eveningSeries)
+        agent = PlanningAgent(places: flexiblePlaces, environment: flexibleProvider)
+        session = PlanningSession.started()
+        session = await agent.handle("Maya has a run today at 6 pm for 45 minutes near Test field", session: session, profiles: [profile], now: eveningNow)
+        session = await agent.handle("up to 1 hour", session: session, profiles: [profile], now: eveningNow)
+        check(session.phase == .recommending && session.lastPlan != nil && session.lastResult != nil, "complete plan with flexibility reaches recommendation")
+        let engineResult = CounterfactualEngine.evaluate(plan: session.lastPlan!, series: eveningSeries, now: eveningNow)
+        check(session.lastResult!.alternatives.map { $0.reductionPercent(for: .pm25) ?? -1 } == engineResult.alternatives.map { $0.reductionPercent(for: .pm25) ?? -1 }, "alternatives only come from CounterfactualEngine")
+        check(!session.lastResult!.alternatives.isEmpty, "fixture produces time alternatives when flexibility allows")
+        check(session.lastGuidance.contains { $0.title == "For respiratory conditions" } && session.lastGuidance.contains { $0.title == "Heat guidance" }, "guidance appears when profile and forecast match")
+        let mayaSession = session
+
+        let plain = UserProfile(name: "Alex", relationship: .myself)
+        let plainPlaces = StubPlaceSearch(results: [location])
+        let plainProvider = CountingProvider(series: eveningSeries)
+        agent = PlanningAgent(places: plainPlaces, environment: plainProvider)
+        session = PlanningSession.started()
+        session = await agent.handle("Alex has a run today at 6 pm for 45 minutes near Test field", session: session, profiles: [plain], now: eveningNow)
+        session = await agent.handle("up to 1 hour", session: session, profiles: [plain], now: eveningNow)
+        check(session.lastGuidance.contains { $0.title == "Air quality guidance" }, "public air-quality guidance still appears without health tags")
+        check(!session.lastGuidance.contains { $0.title == "For respiratory conditions" }, "respiratory guidance is not attached without a matching condition")
+
+        session = await agent.handle("which route is safer?", session: session, profiles: [plain], now: eveningNow)
+        check(session.messages.last?.text.contains("can't pick a cleaner path") == true, "route ranking is refused")
+
+        let directory2 = FileManager.default.temporaryDirectory.appendingPathComponent("resilio-session-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: directory2) }
+        let saved = EventStore(directory: directory2)
+        let persisted = agent.save(mayaSession, events: saved, profiles: [profile], now: eveningNow, unit: "celsius")
+        check(persisted.phase == .confirmed && saved.events.count == 1, "save writes one event")
+        let encodedSaved = try JSONEncoder.appEncoder.encode(saved.events[0])
+        check(!String(data: encodedSaved, encoding: .utf8)!.contains("Asthma"), "saved assistant events do not duplicate health details")
+
+        let voiceSnapshot = VoicePlanningFormat.snapshot(session: mayaSession, profiles: [profile], now: eveningNow)
+        let voiceJSON = try VoicePlanningFormat.encode(voiceSnapshot)
+        check(voiceSnapshot.routeComparisonAvailable == false && voiceJSON.contains("spokenReply"), "voice snapshot is redacted plan state, not a route ranking")
+        check(!voiceJSON.contains("Asthma") && !voiceJSON.contains("10044") && !voiceJSON.contains("medicalConditions"), "voice snapshots omit health fields")
+        let voicePlaces = StubPlaceSearch(results: [location])
+        let voiceProvider = CountingProvider(series: eveningSeries)
+        let broker = VoiceToolBroker(agent: PlanningAgent(places: voicePlaces, environment: voiceProvider), profiles: [profile], events: nil, temperatureUnit: "celsius", now: eveningNow)
+        var voiceSession = PlanningSession.started()
+        voiceSession = await broker.dispatch("planning_turn", payload: "{\"message\":\"Schedule a run at 6pm\"}", session: voiceSession)
+        check(voiceSession.draft.activityType == .exercise && voicePlaces.lookups == 0, "voice planning_turn uses the on-device agent")
+        voiceSession = await broker.dispatch("planning_turn", payload: "{\"message\":\"which route is safer?\"}", session: voiceSession)
+        check(voiceSession.messages.last?.text.contains("can't pick a cleaner path") == true, "voice tools refuse route ranking")
+
+        check(NYCMonitorCatalog.contains(latitude: 40.76, longitude: -73.95), "Roosevelt Island is inside the NYC monitor box")
+        check(!NYCMonitorCatalog.contains(latitude: 42.36, longitude: -71.06), "Boston is outside the NYC monitor box")
+        check(NYCMonitorCatalog.nearest(latitude: 40.76, longitude: -73.95)?.name == "Queensboro Bridge", "nearest monitor uses published site coordinates")
+        let csv = "SiteName,Operator,starttime,timeofday,Value \nQueensboro Bridge,nyccas,2026-09-11 18:00:00.000,06:00 PM,12.5 \nBQE,nyccas,2026-09-11 18:00:00.000,06:00 PM,4.4 \nQueensboro Bridge,nyccas,2026-09-11 19:00:00.000,07:00 PM,\n"
+        let nycReadings = NYCMonitorCSV.parse(csv, timeZone: TimeZone(identifier: "America/New_York")!)
+        check(nycReadings.count == 2 && nycReadings.contains { $0.siteName == "Queensboro Bridge" && $0.pm25 == 12.5 }, "CSV parser keeps published values and skips empty hours")
+        let site = NYCMonitorSite(name: "Queensboro Bridge", latitude: 40.76123, longitude: -73.96389)
+        let observedHours = NYCMonitorCSV.hours(from: nycReadings, site: site)
+        check(observedHours.count == 1, "empty monitor hours are omitted, not invented")
+        let forecastHour = nycReadings.first { $0.siteName == "Queensboro Bridge" }!.start
+        let forecastOnly = series([
+            EnvironmentalSample(timestamp: forecastHour, pm25: 10, ozone: 20, apparentTemperatureC: 28),
+            EnvironmentalSample(timestamp: forecastHour.addingTimeInterval(3600), pm25: 11, ozone: 21, apparentTemperatureC: 27)
         ])
-        let utc = TimeZone(secondsFromGMT: 0)!
-        let weekNow = hour.addingTimeInterval(86400)
-        func week(_ events: [ActivityEvent], now: Date? = nil) -> WeeklyExposureSummary {
-            WeeklyExposureEngine.summarize(events: events, profileID: profile.id, now: now ?? weekNow, timeZone: utc)
-        }
-        let weighted = week([weeklyEvent])
-        check(weighted.scheduledSeconds == 7200 && weighted.coveredSeconds == 5400 && weighted.missingSeconds == 1800, "weekly missing coverage excludes missing hours")
-        check(weighted.categorySeconds[0] == 1800 && weighted.categorySeconds[3] == 3600, "weekly categories use time weights, not event peak")
-        check(abs(weighted.pm25Mean! - 50.0 / 3) < 0.001 && weighted.pm25Integral == 25 && weighted.pm25Seconds == 5400, "weekly PM2.5 mean and integral use covered time")
-        check(weighted.days.reduce(0) { $0 + $1.coveredSeconds } == weighted.coveredSeconds, "seven-day contributions reconcile")
-        let clippedNow = week([weeklyEvent], now: hour.addingTimeInterval(4500))
-        check(clippedNow.scheduledSeconds == 2700 && clippedNow.categorySeconds[3] == 900, "weekly ongoing event counts only elapsed portion at selected time")
-        check(week([weeklyEvent], now: hour).scheduledSeconds == 0, "weekly future plans contribute nothing")
-        var copy = weeklyEvent; copy.id = UUID()
-        let deduped = week([weeklyEvent, copy])
-        check(deduped.scheduledSeconds == 7200 && deduped.coveredSeconds == 5400 && deduped.pm25Integral == 25, "same-location overlapping events count once")
-        check(deduped.contributions.reduce(0) { $0 + $1.aqiSeconds } == deduped.coveredSeconds, "contributing events do not double-count overlap")
-        var otherPlace = location; otherPlace.longitude += 0.001
-        let conflict = savedEvent(start: hour.addingTimeInterval(3600), minutes: 30, samples: air.samples, place: otherPlace)
-        let conflicted = week([weeklyEvent, conflict])
-        check(conflicted.conflictSeconds == 1800 && conflicted.coveredSeconds == 3600 && conflicted.pm25Seconds == 3600, "different locations exclude only conflicted time from both metrics")
-        var otherProfile = weeklyEvent; otherProfile.plan.profileID = another.id
-        check(week([otherProfile]).scheduledSeconds == 0 && week([weeklyEvent, otherProfile]).scheduledSeconds == 7200, "weekly profile isolation")
-        check(WeeklyExposureEngine.summarize(events: [weeklyEvent], profileID: nil, now: weekNow, timeZone: utc).scheduledSeconds == 0, "no selected profile has no summary data")
-        var legacy = weeklyEvent; legacy.analysis?.environmentalWindow = nil
-        let legacyData = try JSONEncoder.appEncoder.encode(legacy)
-        check(!String(decoding: legacyData, as: UTF8.self).contains("environmentalWindow"), "legacy snapshot omits new optional field")
-        let decodedLegacy = try JSONDecoder.appDecoder.decode(ActivityEvent.self, from: legacyData)
-        check(decodedLegacy.analysis?.environmentalWindow == nil && decodedLegacy.savedAQI.peak == nil && week([decodedLegacy]).coveredSeconds == 0, "older saved events decode with honest missing coverage")
-        let savedRoundTrip = try JSONDecoder.appDecoder.decode(ActivityEvent.self, from: JSONEncoder.appEncoder.encode(weeklyEvent))
-        check(savedRoundTrip == weeklyEvent && savedRoundTrip.analysis?.environmentalWindow?.series.source == "Synthetic regression fixture", "saved hourly data and provenance round trip")
-        var lateForecast = weeklyEvent
-        lateForecast.analysis?.environmentalWindow?.series.fetchedAt = weekNow
-        check(week([lateForecast]).coveredSeconds == 0, "today's forecast never replaces past conditions")
-        var mismatched = weeklyEvent; mismatched.plan.location = otherPlace
-        check(week([mismatched]).coveredSeconds == 0 && mismatched.savedAQI.peak == nil, "saved environmental data must match event location")
-        let periodStart = weighted.start
-        let boundaryEvent = savedEvent(start: periodStart.addingTimeInterval(-1800), minutes: 60, samples: [.init(timestamp: periodStart.addingTimeInterval(-1800), pm25: 10, usAQI: 50)])
-        check(week([boundaryEvent]).scheduledSeconds == 1800 && week([boundaryEvent]).coveredSeconds == 1800, "weekly start boundary clips crossing events")
-        let invalidDataEvent = savedEvent(start: hour, minutes: 60, samples: [.init(timestamp: hour, pm25: -3, usAQI: -2)])
-        check(week([invalidDataEvent]).pm25Mean == nil && week([invalidDataEvent]).coveredSeconds == 0, "invalid weekly values are missing, not zero exposure")
-        let separateCoverage = savedEvent(start: hour, minutes: 60, samples: [.init(timestamp: hour, pm25: nil, usAQI: 30)])
-        check(week([separateCoverage]).coveredSeconds == 3600 && week([separateCoverage]).pm25Seconds == 0, "AQI and particle coverage stay independent")
-        let ny = TimeZone(identifier: "America/New_York")!
-        let dstNow = ISO8601DateFormatter().date(from: "2026-03-09T04:00:00Z")!
-        let dstWeek = WeeklyExposureEngine.summarize(events: [], profileID: profile.id, now: dstNow, timeZone: ny)
-        check(dstWeek.days.count == 7 && dstWeek.days[6].start.timeIntervalSince(dstWeek.days[5].start) == 23 * 3600, "reporting calendar respects DST and seven local days")
+        let merged = NYCObservationMerge.apply(forecast: forecastOnly, site: site, hours: observedHours)
+        let mergedOriginal = merged.samples.first { $0.timestamp == forecastHour }!
+        let mergedNext = merged.samples.first { $0.timestamp == forecastHour.addingTimeInterval(3600) }!
+        check(mergedOriginal.pm25 == 12.5, "NYC overlay replaces PM2.5 for matching hours")
+        check(mergedOriginal.ozone == 20 && mergedOriginal.apparentTemperatureC == 28, "NYC overlay does not invent ozone or heat")
+        check(mergedNext.pm25 == 11, "hours without a monitor reading keep the forecast")
+        check(merged.observedPM25Site == "Queensboro Bridge", "merged series names the monitor")
+        let nyc = CountingNYCObserver()
+        let boston = try await MergedEnvironmentalProvider(forecast: CountingProvider(series: forecastOnly), observations: nyc).fetchConditions(latitude: 42.36, longitude: -71.06, range: forecastHour...forecastHour.addingTimeInterval(3600))
+        check(boston.observedPM25Site == nil && nyc.count == 0, "locations outside NYC never request monitors")
+        nyc.result = (site, observedHours)
+        let inCity = try await MergedEnvironmentalProvider(forecast: CountingProvider(series: forecastOnly), observations: nyc).fetchConditions(latitude: 40.76, longitude: -73.95, range: forecastHour...forecastHour.addingTimeInterval(3600))
+        check(inCity.observedPM25Site == "Queensboro Bridge" && nyc.count == 1, "NYC plans overlay the nearest monitor")
+        nyc.shouldFail = true
+        let fallback = try await MergedEnvironmentalProvider(forecast: CountingProvider(series: forecastOnly), observations: nyc).fetchConditions(latitude: 40.76, longitude: -73.95, range: forecastHour...forecastHour.addingTimeInterval(3600))
+        check(fallback.observedPM25Site == nil && fallback.samples.first?.pm25 == 10, "monitor failure leaves the forecast in place")
         print("\(passed) regression checks passed")
+    }
+}
+
+final class CountingNYCObserver: NYCObserving, @unchecked Sendable {
+    var count = 0
+    var shouldFail = false
+    var result: (site: NYCMonitorSite, hours: [Date: Double])?
+    func observations(latitude: Double, longitude: Double) async throws -> (site: NYCMonitorSite, hours: [Date: Double]) {
+        count += 1
+        if shouldFail { throw EnvironmentalDataError.forecastUnavailable }
+        guard let result else { throw EnvironmentalDataError.forecastUnavailable }
+        return result
+    }
+}
+
+final class StubPlaceSearch: PlaceSearching, @unchecked Sendable {
+    var results: [ActivityLocation]
+    var lookups = 0
+    init(results: [ActivityLocation]) { self.results = results }
+    func lookup(_ query: String) async throws -> [ActivityLocation] {
+        lookups += 1
+        guard !results.isEmpty else { throw EnvironmentalDataError.invalidLocation }
+        return results
     }
 }

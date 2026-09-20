@@ -25,12 +25,8 @@ struct HomeView: View {
                                 }.multilineTextAlignment(.leading)
                             }.font(.subheadline).frame(minHeight: 44)
                         }
-                        Spacer(minLength: 0)
-                    }
-                    TimelineView(.periodic(from: .now, by: 60)) { context in
-                        WeeklyOverviewView(events: app.events.events, profileID: app.profiles.selectedProfileID, now: context.date, storageError: app.events.isReadable ? nil : "Saved plans could not be opened. Restart after recovering the saved file; it has not been overwritten.") {
-                            app.selectedTab = app.profiles.selectedProfile == nil ? .profile : .schedule
-                        }
+                        Spacer(minLength: 4)
+                        ResilioLogoMark(size: 56)
                     }
                     PrivacyNote()
                     conditions
@@ -74,7 +70,7 @@ struct HomeView: View {
             if let sample = currentSample {
                 LazyVGrid(columns: typeSize.isAccessibilitySize ? [GridItem(.flexible())] : [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                     ConditionCard(title: "Temperature", value: DisplayFormat.temperature(sample.temperatureC, unit: unit), detail: "Hourly forecast", icon: "thermometer.medium")
-                    CurrentAQICard(value: sample.usAQI)
+                    ConditionCard(title: "Air quality", value: DisplayFormat.airQuality(sample.usAQI), detail: sample.usAQI.map { "US AQI · \(Int($0.rounded()))" } ?? "No reading available", icon: "aqi.medium", severity: DisplayFormat.airQualityLevel(sample.usAQI))
                     ConditionCard(title: "UV", value: uvLabel(sample.uvIndex), detail: sample.uvIndex.map { "Index · \(String(format: "%.1f", $0))" } ?? "No reading available", icon: "sun.max")
                     ConditionCard(title: "Feels like", value: DisplayFormat.temperature(sample.apparentTemperatureC, unit: unit), detail: DisplayFormat.heatCategory(sample.apparentTemperatureC) ?? "Heat & humidity", icon: "sun.haze", severity: DisplayFormat.heatLevel(sample.apparentTemperatureC))
                 }
@@ -165,7 +161,7 @@ struct ConditionCard: View {
         VStack(alignment: .leading, spacing: 9) {
             Image(systemName: icon).font(.title3).foregroundStyle(severity?.color ?? ResilioTheme.tint)
             Text(value).font(.system(.title2, design: .rounded, weight: .semibold)).minimumScaleFactor(0.75)
-                .foregroundStyle(.primary)
+                .foregroundStyle(severity?.color ?? .primary)
             Text(title).font(.subheadline.weight(.medium))
             Text(detail).font(.caption).foregroundStyle(.secondary)
         }.frame(maxWidth: .infinity, minHeight: 128, alignment: .leading).padding(16)
