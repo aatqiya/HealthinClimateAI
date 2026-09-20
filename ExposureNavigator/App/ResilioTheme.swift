@@ -1,6 +1,11 @@
 import SwiftUI
 
 enum ResilioTheme {
+    static let pageInset: CGFloat = 20
+    static let cardRadius: CGFloat = 24
+    static let controlRadius: CGFloat = 16
+    static let sectionSpacing: CGFloat = 24
+    static let cardInset: CGFloat = 20
     static let sage = Color(red: 0.59, green: 0.67, blue: 0.55)
     static let forest = Color(red: 0.24, green: 0.36, blue: 0.28)
     static let background = Color(uiColor: .systemGroupedBackground)
@@ -35,17 +40,55 @@ struct ResilioLogoMark: View {
 }
 
 struct PrimaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
     func makeBody(configuration: Configuration) -> some View {
         configuration.label.font(.headline).frame(maxWidth: .infinity).padding(.vertical, 16)
             .foregroundStyle(.white)
-            .background(ResilioTheme.forest.opacity(configuration.isPressed ? 0.8 : 1), in: RoundedRectangle(cornerRadius: 18))
+            .background(ResilioTheme.forest.opacity(isEnabled ? (configuration.isPressed ? 0.8 : 1) : 0.45), in: RoundedRectangle(cornerRadius: ResilioTheme.controlRadius))
     }
 }
 
 extension View {
+    func resilioForm() -> some View {
+        scrollContentBackground(.hidden)
+            .background(ResilioTheme.background)
+            .listSectionSpacing(ResilioTheme.sectionSpacing)
+            .environment(\.defaultMinListRowHeight, 48)
+    }
+
     func resilioCard() -> some View {
-        padding(18).frame(maxWidth: .infinity, alignment: .leading)
-            .background(ResilioTheme.surface, in: RoundedRectangle(cornerRadius: 22))
+        padding(ResilioTheme.cardInset).frame(maxWidth: .infinity, alignment: .leading)
+            .background(ResilioTheme.surface, in: RoundedRectangle(cornerRadius: ResilioTheme.cardRadius))
+    }
+}
+
+/// Shared category accents for provider-reported US AQI and modeled heat.
+/// Raw particle concentrations are never given an AQI badge.
+enum SeverityLevel: Int, Comparable {
+    case good, moderate, elevated, high, veryHigh, extreme
+    static func < (lhs: SeverityLevel, rhs: SeverityLevel) -> Bool { lhs.rawValue < rhs.rawValue }
+    var color: Color {
+        switch self {
+        case .good: Color(red: 0.20, green: 0.55, blue: 0.30)
+        case .moderate: Color(red: 0.80, green: 0.62, blue: 0.10)
+        case .elevated: Color(red: 0.88, green: 0.45, blue: 0.12)
+        case .high: Color(red: 0.80, green: 0.20, blue: 0.20)
+        case .veryHigh: Color(red: 0.55, green: 0.20, blue: 0.55)
+        case .extreme: Color(red: 0.42, green: 0.10, blue: 0.14)
+        }
+    }
+}
+
+struct SeverityBadge: View {
+    let label: String
+    let level: SeverityLevel
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle().fill(level.color).frame(width: 8, height: 8)
+            Text(label).font(.caption.weight(.semibold)).foregroundStyle(.primary).fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 10).padding(.vertical, 5)
+        .background(level.color.opacity(0.15), in: Capsule())
     }
 }
 

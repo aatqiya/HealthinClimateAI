@@ -24,14 +24,20 @@ struct ResultsView: View {
             case .loaded(let result, let series):
                 List {
                     Section("Your plan") {
-                        Text(plan.activityName).font(.title2.bold())
-                        Text(app.profiles.profiles.first { $0.id == plan.profileID }?.name ?? "Profile").foregroundStyle(ResilioTheme.tint)
-                        Text(DisplayFormat.date(plan.startTime, at: plan.location) + " · " + timeRange(result.original))
-                        Label(plan.location.name, systemImage: "mappin").foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(plan.activityName).font(.title2.bold())
+                            Text(app.profiles.profiles.first { $0.id == plan.profileID }?.name ?? "Profile").font(.subheadline).foregroundStyle(ResilioTheme.tint)
+                            Text(DisplayFormat.date(plan.startTime, at: plan.location) + " · " + timeRange(result.original)).font(.subheadline)
+                            Label(plan.location.name, systemImage: "mappin").font(.subheadline).foregroundStyle(.secondary)
+                        }.padding(.vertical, 4)
+
                     }
                     Section("What we found") {
                         Text(summary(result))
                         LabeledContent("Fine particle pollution", value: result.original.metric(.pm25).map { "\(Int($0.meanConcentration.rounded())) µg/m³" } ?? "Unavailable")
+                        if let particle = result.original.metric(.pm25), particle.dataCoverage < 0.999 {
+                            Text("PM2.5 estimate covers \(Int((particle.dataCoverage * 100).rounded()))% of activity time.").font(.caption).foregroundStyle(.secondary)
+                        }
                         LabeledContent("Feels like", value: DisplayFormat.temperature(result.original.metric(.heat)?.meanConcentration, unit: unit))
                     }
                     Section("Your options") {
@@ -44,6 +50,8 @@ struct ResultsView: View {
                     Section("Selected plan") {
                         let assessment = selected?.assessment ?? result.original
                         Label(timeRange(assessment), systemImage: "checkmark.circle.fill").font(.headline).foregroundStyle(ResilioTheme.tint)
+                        AQIReadingView(window: assessment.aqi)
+                        AQIScale(category: assessment.aqi.category)
                         Text("\(plan.durationMinutes) minutes · \(plan.location.timeZone.identifier)").font(.caption).foregroundStyle(.secondary)
                         if let route { Text("\(route.name) · \(route.durationMinutes) min travel") }
                         Button(existingEventID == nil ? "Save Event" : "Update Event") { save(result: result, series: series) }.buttonStyle(PrimaryButtonStyle()).disabled(saved)
@@ -53,6 +61,7 @@ struct ResultsView: View {
                     }
                     Section {
                         DisclosureGroup("How was this estimated?") {
+                            Text("Peak forecast AQI is the highest provider-reported US AQI across hours overlapping the activity, rounded to a whole number. Missing hours are excluded and shown as partial coverage. AQI grading is separate from PM2.5 comparison.")
                             Text("Hourly forecast concentrations are weighted by the time your activity overlaps each hour. Duration stays fixed. This is modeled ambient exposure, not inhaled dose or a medical risk estimate.")
                             Text("Alternatives need complete particle data and at least 10% lower modeled exposure to appear. This display threshold is not a health threshold. Small forecast differences may be uncertain.")
                             if let particle = result.original.metric(.pm25) { LabeledContent("Original data coverage", value: "\(Int((particle.dataCoverage * 100).rounded()))%") }
@@ -64,7 +73,7 @@ struct ResultsView: View {
                             Link("Open-Meteo & CAMS sources", destination: URL(string: "https://open-meteo.com/en/docs/air-quality-api")!)
                         }.font(.subheadline)
                     }
-                }
+                }.resilioForm()
             }
         }.navigationTitle("Your options").navigationBarTitleDisplayMode(.inline)
             .task { await model.analyze(plan: plan) }
@@ -79,7 +88,7 @@ struct ResultsView: View {
     func change(_ alternative: Alternative) -> String { switch alternative.change { case .timeShift(let minutes): return minutes > 0 ? "Start \(minutes) minutes later" : "Start \(-minutes) minutes earlier" } }
     func save(result: CounterfactualResult, series: EnvironmentalTimeSeries) {
         let assessment = selected?.assessment ?? result.original
-        let snapshot = ExposureSnapshot(sourceRetrievedAt: series.fetchedAt, sourceMeasurementUpdatedAt: series.sourceUpdatedAt, analyzedAt: Date(), source: series.source, sourceUpdatedAt: series.fetchedAt, originalStart: plan.startTime, selectedStart: assessment.start, pm25Mean: assessment.metric(.pm25)?.meanConcentration, apparentTemperatureC: assessment.metric(.heat)?.meanConcentration, reductionPercent: selected?.reductionPercent(for: .pm25))
+        let snapshot = ExposureSnapshot(environmentalWindow: SavedEnvironmentalWindow(location: plan.location, start: assessment.start, end: assessment.end, series: series), sourceRetrievedAt: series.fetchedAt, sourceMeasurementUpdatedAt: series.sourceUpdatedAt, analyzedAt: Date(), source: series.source, sourceUpdatedAt: series.fetchedAt, originalStart: plan.startTime, selectedStart: assessment.start, pm25Mean: assessment.metric(.pm25)?.meanConcentration, apparentTemperatureC: assessment.metric(.heat)?.meanConcentration, reductionPercent: selected?.reductionPercent(for: .pm25))
         persist(start: assessment.start, snapshot: snapshot)
     }
     func saveUnanalyzed() { persist(start: plan.startTime, snapshot: nil) }
@@ -107,14 +116,18 @@ struct OptionCard: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(title).font(.headline)
                     Text("\(DisplayFormat.time(assessment.start, at: location))–\(DisplayFormat.time(assessment.end, at: location))")
+                    AQIReadingView(window: assessment.aqi)
                     if let reduction {
                         Text("\(Int(reduction.rounded()))% lower modeled fine particle exposure").font(.subheadline).foregroundStyle(ResilioTheme.tint)
-                        Text("Forecast particle levels are lower over this time window.").font(.caption).foregroundStyle(.secondary)
+                        if let category = assessment.aqi.category, category.rawValue >= 2 {
+                            Text("Air quality remains \(category.label)\(assessment.aqi.isPartial ? " during covered time" : "").").font(.caption).foregroundStyle(.secondary)
+                        }
                     }
                     if let heat = assessment.metric(.heat) { Text("Feels like \(DisplayFormat.temperature(heat.meanConcentration, unit: unit))").font(.caption).foregroundStyle(.secondary) }
                 }
             }.frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 10).contentShape(Rectangle())
         }.buttonStyle(.plain).accessibilityAddTraits(selected ? .isSelected : [])
+            .sensoryFeedback(.selection, trigger: selected)
     }
 }
 struct GuidanceSection: View {

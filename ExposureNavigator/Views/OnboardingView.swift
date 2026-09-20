@@ -55,7 +55,7 @@ struct OnboardingView: View {
             VStack(alignment: .leading, spacing: 16) {
                 Label("Your health information is optional.", systemImage: "heart.text.square").font(.headline)
                 Text("Resilio only considers information you voluntarily provide. You can use it without adding medical conditions, medications, mental health information, or other health details.")
-                Text("You can edit or remove these details later. Resilio does not access medical records or Apple Health.").foregroundStyle(.secondary)
+                PrivacyNote(healthFields: true)
             }.resilioCard()
         default:
             VStack(alignment: .leading, spacing: 16) {

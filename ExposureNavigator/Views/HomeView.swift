@@ -4,6 +4,7 @@ struct HomeView: View {
     @Environment(AppState.self) private var app
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("temperatureUnit") private var unit = "fahrenheit"
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var showingProfiles = false
     @State private var showingAI = false
     @State private var choosingLocation = false
@@ -11,30 +12,36 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 26) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(greeting).font(.system(.title, design: .rounded, weight: .bold))
+                VStack(alignment: .leading, spacing: ResilioTheme.sectionSpacing) {
+                    HStack(alignment: .top, spacing: 12) {
+                        ResilioLogoMark(size: 44)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Resilio").font(.caption.weight(.semibold)).foregroundStyle(ResilioTheme.tint)
+                            Text(greeting).font(.system(.title2, design: .rounded, weight: .bold))
                             Button { showingProfiles = true } label: {
-                                HStack { Text("Planning for \(app.profiles.selectedProfile?.name ?? "someone new")"); Image(systemName: "chevron.down").font(.caption.bold()) }
+                                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                    Text("Planning for \(app.profiles.selectedProfile?.name ?? "someone new")")
+                                    Image(systemName: "chevron.down").font(.caption.bold())
+                                }.multilineTextAlignment(.leading)
                             }.font(.subheadline).frame(minHeight: 44)
                         }
                         Spacer(minLength: 4)
                         ResilioLogoMark(size: 56)
                     }
+                    PrivacyNote()
                     conditions
                     hourly
                     Button { showingAI = true } label: {
                         HStack(spacing: 16) {
                             Image(systemName: "sparkles").font(.title)
-                            VStack(alignment: .leading, spacing: 5) { Text("Plan with AI").font(.headline); Text("Start with what's on your mind.").font(.subheadline).opacity(0.85) }
+                            VStack(alignment: .leading, spacing: 5) { Text("Planning assistant").font(.headline); Text("Start with what's on your mind.").font(.subheadline).opacity(0.85) }
                             Spacer(); Image(systemName: "arrow.up.right")
                         }.padding(22).foregroundStyle(.white).background(ResilioTheme.forest, in: RoundedRectangle(cornerRadius: 24))
                     }.buttonStyle(.plain)
                     upcoming
-                }.padding(20)
+                }.padding(ResilioTheme.pageInset)
             }.background(ResilioTheme.background).refreshable { await refresh() }
-                .navigationTitle("Resilio").navigationBarTitleDisplayMode(.inline)
+                .toolbar(.hidden, for: .navigationBar)
                 .sheet(isPresented: $showingProfiles) { ProfileSwitcher() }
                 .sheet(isPresented: $showingAI) { AIPlannerView() }
                 .sheet(isPresented: $choosingLocation) { LocationPickerView { app.manualLocation = $0 } }
@@ -61,7 +68,7 @@ struct HomeView: View {
             }
             Button { choosingLocation = true } label: { Label(app.environment.current?.location.name ?? app.manualLocation?.name ?? "Choose a location", systemImage: "location").font(.subheadline) }
             if let sample = currentSample {
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                LazyVGrid(columns: typeSize.isAccessibilitySize ? [GridItem(.flexible())] : [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                     ConditionCard(title: "Temperature", value: DisplayFormat.temperature(sample.temperatureC, unit: unit), detail: "Hourly forecast", icon: "thermometer.medium")
                     ConditionCard(title: "Air quality", value: DisplayFormat.airQuality(sample.usAQI), detail: sample.usAQI.map { "US AQI · \(Int($0.rounded()))" } ?? "No reading available", icon: "aqi.medium", severity: DisplayFormat.airQualityLevel(sample.usAQI))
                     ConditionCard(title: "UV", value: uvLabel(sample.uvIndex), detail: sample.uvIndex.map { "Index · \(String(format: "%.1f", $0))" } ?? "No reading available", icon: "sun.max")
@@ -101,11 +108,12 @@ struct HomeView: View {
                         ForEach(Array(samples), id: \.timestamp) { sample in
                             VStack(spacing: 10) {
                                 Text(app.environment.current.map { DisplayFormat.time(sample.timestamp, at: $0.location) } ?? sample.timestamp.formatted(date: .omitted, time: .shortened)).font(.caption)
-                                Image(systemName: sample.usAQI.map { $0 > 100 ? "aqi.medium" : "leaf" } ?? "clock").font(.title3).foregroundStyle(ResilioTheme.tint)
+                                Image(systemName: "aqi.medium").font(.title3).foregroundStyle(AQICategory.category(for: sample.usAQI)?.color ?? ResilioTheme.tint)
+                                Text(AQICategory.reading(sample.usAQI).map { "AQI \($0)" } ?? "AQI —").font(.caption.weight(.semibold))
                                 Text(DisplayFormat.temperature(sample.temperatureC, unit: unit)).font(.headline)
                                 Text(DisplayFormat.airQuality(sample.usAQI)).font(.caption2).multilineTextAlignment(.center)
                                 if let rain = sample.precipitationProbability { Text("\(Int(rain.rounded()))% rain").font(.caption2).foregroundStyle(.secondary) }
-                            }.frame(width: 94, alignment: .top).padding(.vertical, 16)
+                            }.frame(width: typeSize.isAccessibilitySize ? 180 : 116, alignment: .top).padding(.vertical, 16)
                                 .background(ResilioTheme.surface, in: RoundedRectangle(cornerRadius: 18))
                         }
                     }
@@ -116,7 +124,7 @@ struct HomeView: View {
     var upcoming: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack { Text("Upcoming plans").font(.title2.bold()); Spacer(); Button("See all") { app.selectedTab = .calendar }.font(.subheadline) }
-            if app.events.upcoming.isEmpty {
+            if profileUpcoming.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {
                     Image(systemName: "calendar.badge.plus").font(.title).foregroundStyle(ResilioTheme.tint)
                     Text("Make room for a better plan.").font(.headline)
@@ -124,12 +132,13 @@ struct HomeView: View {
                     Button("Schedule a plan") { app.selectedTab = app.profiles.selectedProfile == nil ? .profile : .schedule }.frame(minHeight: 44)
                 }.resilioCard()
             } else {
-                ForEach(app.events.upcoming.prefix(5)) { event in
+                ForEach(profileUpcoming.prefix(5)) { event in
                     Button { app.openEvent(event) } label: { EventRow(event: event, profile: app.profiles.profiles.first { $0.id == event.profileID }).resilioCard() }.buttonStyle(.plain)
                 }
             }
         }
     }
+    var profileUpcoming: [ActivityEvent] { app.events.upcoming.filter { $0.profileID == app.profiles.selectedProfileID } }
     func refresh() async {
         if let manual = app.manualLocation { await app.environment.refresh(location: manual); return }
         if let location = app.location.location {
@@ -156,7 +165,7 @@ struct ConditionCard: View {
             Text(title).font(.subheadline.weight(.medium))
             Text(detail).font(.caption).foregroundStyle(.secondary)
         }.frame(maxWidth: .infinity, minHeight: 128, alignment: .leading).padding(16)
-            .background(ResilioTheme.surface, in: RoundedRectangle(cornerRadius: 22))
+            .background(ResilioTheme.surface, in: RoundedRectangle(cornerRadius: ResilioTheme.cardRadius))
     }
 }
 struct EventRow: View {
@@ -170,6 +179,9 @@ struct EventRow: View {
                 Text(profile?.name ?? "Deleted profile").font(.subheadline).foregroundStyle(ResilioTheme.tint)
                 Text(DisplayFormat.date(event.selectedStart, at: event.plan.location) + " · " + DisplayFormat.time(event.selectedStart, at: event.plan.location)).font(.subheadline)
                 Text(event.plan.location.name).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                if let category = event.savedAQI.category, let peak = event.savedAQI.peak {
+                    Text("Saved AQI \(peak) · \(category.label)\(event.savedAQI.isPartial ? " · Partial" : "")").font(.caption).foregroundStyle(.secondary)
+                }
             }
             Spacer(minLength: 0); Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
         }.padding(.vertical, 4).contentShape(Rectangle())

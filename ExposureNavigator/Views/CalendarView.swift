@@ -4,6 +4,7 @@ import EventKit
 struct CalendarView: View {
     @Environment(AppState.self) private var app
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var date = Date()
     @State private var selectedID: UUID?
     @State private var showingEvent = false
@@ -15,7 +16,13 @@ struct CalendarView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section { MonthOverview(selectedDate: $date, plannedDates: app.events.events.map(\.selectedStart) + app.calendars.events.map(\.start)) }
+                Section {
+                    if typeSize.isAccessibilitySize {
+                        DatePicker("Viewing date", selection: $date, displayedComponents: .date)
+                    } else {
+                        MonthOverview(selectedDate: $date, plannedDates: app.events.events.map(\.selectedStart) + app.calendars.events.map(\.start))
+                    }
+                }
                 Section(date.formatted(date: .complete, time: .omitted)) {
                     if eventsForDay.isEmpty && externalForDay.isEmpty { Text("No plans for this date.").foregroundStyle(.secondary) }
                     ForEach(eventsForDay) { event in Button { open(event) } label: { EventRow(event: event, profile: app.profiles.profiles.first { $0.id == event.profileID }) }.buttonStyle(.plain) }
@@ -38,7 +45,7 @@ struct CalendarView: View {
                     ForEach(app.events.upcoming.prefix(10)) { event in Button { open(event) } label: { EventRow(event: event, profile: app.profiles.profiles.first { $0.id == event.profileID }) }.buttonStyle(.plain) }
                 }
                 Section("Connected calendars") { CalendarConnectionsView(date: date) }
-            }.navigationTitle("Calendar")
+            }.resilioForm().navigationTitle("Calendar")
                 .toolbar { Button("Today") { date = Date() } }
                 .sheet(isPresented: $showingEvent) { if let selectedID { EventDetailView(eventID: selectedID) } }
                 .onAppear { openRequested() }
@@ -130,8 +137,18 @@ struct EventDetailView: View {
                             if let route = event.selectedRoute { Text("\(route.name) · \(route.durationMinutes) min travel"); Text("Route pollution differences are not estimated.").font(.caption) }
                         }
                         Section("Forecast for your plan") {
+                            AQIReadingView(window: fresh?.aqi ?? event.savedAQI, label: fresh == nil ? "Saved peak forecast AQI" : "Peak forecast AQI")
+                            AQIScale(category: (fresh?.aqi ?? event.savedAQI).category)
                             let pm = fresh == nil ? event.analysis?.pm25Mean : fresh?.metric(.pm25)?.meanConcentration
                             LabeledContent("Fine particle pollution", value: pm.map { "\(Int($0.rounded())) µg/m³" } ?? "Unavailable")
+                            if let particle = fresh?.metric(.pm25) {
+                                Text("PM2.5 estimate covers \(Int((particle.dataCoverage * 100).rounded()))% of activity time.").font(.caption).foregroundStyle(.secondary)
+                            } else if fresh == nil, let window = event.analysis?.environmentalWindow,
+                                      let particle = ExposureEngine.assess(series: window.series, start: event.selectedStart, durationMinutes: event.plan.durationMinutes).metric(.pm25) {
+                                Text("Saved PM2.5 estimate covers \(Int((particle.dataCoverage * 100).rounded()))% of activity time.").font(.caption).foregroundStyle(.secondary)
+                            } else if fresh == nil, pm != nil {
+                                Text("Hourly coverage was not saved with this older PM2.5 estimate.").font(.caption).foregroundStyle(.secondary)
+                            }
                             LabeledContent("Feels like", value: DisplayFormat.temperature(fresh == nil ? event.analysis?.apparentTemperatureC : fresh?.metric(.heat)?.meanConcentration, unit: unit))
                             if let refreshedAt { Text("Forecast retrieved \(refreshedAt.formatted())").font(.caption).foregroundStyle(.secondary) }
                             else if let analysis = event.analysis { Text("Saved estimate from \(analysis.analyzedAt.formatted())").font(.caption).foregroundStyle(.secondary) }
@@ -158,7 +175,7 @@ struct EventDetailView: View {
                         }
                     }
                 } else { ContentUnavailableView("Event removed", systemImage: "calendar") }
-            }.navigationTitle("Plan details").navigationBarTitleDisplayMode(.inline).toolbar { Button("Done") { dismiss() } }
+            }.resilioForm().navigationTitle("Plan details").navigationBarTitleDisplayMode(.inline).toolbar { Button("Done") { dismiss() } }
                 .task(id: event?.selectedStart) { await refresh() }
                 .sheet(isPresented: $showResults) { if let event { NavigationStack { ResultsView(plan: event.plan, existingEventID: event.id, route: event.selectedRoute).toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { showResults = false } } } } } }
                 .sheet(isPresented: $exporting) { if let event { AppleCalendarExportView(event: event, store: app.calendars.store) { exporting = false } } }
@@ -172,8 +189,9 @@ struct EventDetailView: View {
         do {
             let series = try await ForecastRepository.shared.fetchConditions(latitude: event.plan.location.latitude, longitude: event.plan.location.longitude, range: event.selectedStart...event.endTime)
             let assessment = ExposureEngine.assess(series: series, start: event.selectedStart, durationMinutes: event.plan.durationMinutes)
-            guard !assessment.metrics.isEmpty else { refreshError = "A current forecast is not yet available for this date. Showing any saved estimate."; return }
+            guard !assessment.metrics.isEmpty || assessment.aqi.peak != nil else { refreshError = "A current forecast is not yet available for this date. Showing any saved estimate."; return }
             fresh = assessment; refreshedAt = series.fetchedAt; refreshError = nil
+
         } catch { refreshError = "Couldn't refresh conditions. Any saved estimate is still shown." }
     }
 }

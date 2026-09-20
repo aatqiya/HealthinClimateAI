@@ -44,6 +44,7 @@ struct ExposureAssessment: Equatable {
     var start: Date
     var durationMinutes: Int
     var metrics: [ExposureMetric.Pollutant: ExposureMetric]
+    var aqi = AQIWindow()
 
     var end: Date { start.addingTimeInterval(TimeInterval(durationMinutes * 60)) }
     func metric(_ pollutant: ExposureMetric.Pollutant) -> ExposureMetric? { metrics[pollutant] }
@@ -101,7 +102,7 @@ enum ExposureEngine {
             )
         }
 
-        return ExposureAssessment(start: start, durationMinutes: durationMinutes, metrics: metrics)
+        return ExposureAssessment(start: start, durationMinutes: durationMinutes, metrics: metrics, aqi: AQIWindow.assess(series: series, start: start, end: end))
     }
 
     private static func value(of pollutant: ExposureMetric.Pollutant, in sample: EnvironmentalSample) -> Double? {
