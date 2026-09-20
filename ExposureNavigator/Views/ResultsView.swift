@@ -138,14 +138,14 @@ struct GuidanceSection: View {
     var heat: Double? { assessment.metric(.heat)?.meanConcentration }
     var body: some View {
         Section("Public-health information") {
-            let aqiBadge = DisplayFormat.pm25Badge(pm25)
+            let aqiBadge = DisplayFormat.aqiBadge(assessment.aqi.peak.map(Double.init))
             let heatBadge = DisplayFormat.heatBadge(heat)
             if aqiBadge != nil || heatBadge != nil {
-                HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 8) {
                     if let aqiBadge { SeverityBadge(label: "Air quality: \(aqiBadge.label)", level: aqiBadge.level) }
                     if let heatBadge { SeverityBadge(label: "Heat: \(heatBadge.label)", level: heatBadge.level) }
                 }
-                Text("Categories use EPA and NWS thresholds for this modeled window. Guidance below follows from whichever categories apply.").font(.caption).foregroundStyle(.secondary)
+                Text("Air quality uses peak provider-reported US AQI for covered time. Heat uses modeled apparent temperature. These estimates do not determine personal safety.").font(.caption).foregroundStyle(.secondary)
             }
             ForEach(GuidanceLibrary.items(profile: profile, plan: plan, pm25Mean: pm25, apparentTemperatureC: heat)) { item in
                 DisclosureGroup(item.title) { Text(item.body); if let url = URL(string: item.url) { Link(item.source, destination: url) } }

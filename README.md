@@ -26,5 +26,3 @@ Shared forecast caching avoids repeated upstream requests, preserves retrieval p
 Run `Tests/run.sh` for deterministic regression checks covering exposure integration, coverage, feasibility, storage, profile ownership, assistant extraction, and caching. Test fixtures are isolated from app data and never displayed in the product.
 
 See [IMPLEMENTATION_REPORT.md](IMPLEMENTATION_REPORT.md) for the change inventory, verified behavior, known limitations, and exact demo script. See [INTEGRATIONS.md](INTEGRATIONS.md) for available services and configuration requirements.
-
-Voice Plan with AI is optional and uses ElevenLabs. Create an agent in the ElevenLabs dashboard (see INTEGRATIONS.md), paste its Agent ID into the Xcode project's `ELEVENLABS_AGENT_ID` build setting, then tap the mic in Plan with AI — no backend process to start.

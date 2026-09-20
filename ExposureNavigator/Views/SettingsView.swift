@@ -19,13 +19,10 @@ struct SettingsView: View {
             Section("Health") { AppleHealthConnectionView() }
             Section("Services") {
                 LabeledContent("Address search", value: "Apple Maps")
-                LabeledContent("Forecast", value: "Open-Meteo")
-                LabeledContent("NYC PM2.5 monitors", value: "NYC DOHMH / Queens College")
                 LabeledContent("Google Maps & routes", value: GoogleRoutesService.isConfigured ? "Configured · not verified" : "Setup required")
-                LabeledContent("Plan assistant", value: "On-device conversation")
-                LabeledContent("Voice planner", value: ElevenLabsVoiceService.isConfigured ? "Configured · ElevenLabs speaks, planning tools run on this device" : "Setup required")
+                LabeledContent("Plan assistant", value: "On-device parser")
                 LabeledContent("Account sign-in", value: "Setup required")
-                Text("Hosted voice, Google Calendar, and Outlook require service configuration. Text planning works without an account. Voice transcripts go to ElevenLabs to run the conversation; health details stay on this device.").font(.caption).foregroundStyle(.secondary)
+                Text("Hosted AI, Google Calendar, and Outlook require service configuration. Your local profiles and plans work without an account.").font(.caption).foregroundStyle(.secondary)
             }
             Section("Privacy") {
                 NavigationLink("Terms & privacy") { LegalView() }

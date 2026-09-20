@@ -40,8 +40,6 @@ struct EnvironmentalTimeSeries: Codable, Equatable {
     var timeZoneIdentifier: String
     var intervalSemantics: String
     var attributionURL: String?
-    var observedPM25Site: String? = nil
-    var observationAttributionURL: String? = nil
 
     var timeZone: TimeZone { TimeZone(identifier: timeZoneIdentifier) ?? .current }
 
