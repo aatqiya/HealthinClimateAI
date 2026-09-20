@@ -19,7 +19,7 @@ The baseline time-weighted exposure integral and 75% coverage threshold for disp
 
 Events retain profile IDs and original baseline times independently from chosen start times. Re-analysis updates the same event ID. No health details are copied into events or environmental requests. JSON storage reports failures and refuses to overwrite unreadable files. Existing file names and profile decoding compatibility are retained.
 
-Shared forecast caching avoids repeated upstream requests, preserves retrieval provenance, and distinguishes app checks from source updates. Forecast update times not supplied by the source are not invented. All application environmental values are real; only the explicitly selected Maya demo profile is synthetic.
+Shared forecast caching avoids repeated upstream requests, preserves retrieval provenance, and distinguishes app checks from source updates. Forecast update times not supplied by the source are not invented. The Home weekly overview shows a labeled, hardcoded demo week when the selected profile has no past AQI coverage: 12.5 covered hours and an average PM2.5 of 8.4 µg/m³. This display-only fallback never saves sample events and automatically gives way to real weekly coverage. Other application environmental values are real; the explicitly selected Maya demo profile is synthetic.
 
 ## Verify
 

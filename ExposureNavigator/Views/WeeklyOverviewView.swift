@@ -16,6 +16,7 @@ struct WeeklyOverviewView: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var summary: WeeklyExposureSummary?
     @State private var loadedProfileID: UUID?
+    @State private var isShowingDemo = false
     @State private var showingDetails = false
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -26,7 +27,7 @@ struct WeeklyOverviewView: View {
             } else if let summary, loadedProfileID == profileID {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("\(date(summary.start))–\(date(summary.end))").font(.subheadline.weight(.medium))
-                    Text("Estimated from your calendar").font(.caption).foregroundStyle(.secondary)
+                    Text(isShowingDemo ? "Demo week · Sample data" : "Estimated from your calendar").font(.caption).foregroundStyle(.secondary)
                 }
                 if typeSize.isAccessibilitySize {
                     distribution(summary)
@@ -61,7 +62,7 @@ struct WeeklyOverviewView: View {
                     HStack { Text("View week & calculation"); Spacer(); Image(systemName: "arrow.up.right") }
                         .font(.subheadline.weight(.semibold)).frame(minHeight: 44)
                 }
-                Text("Saved estimates of ambient conditions, not measured personal exposure.").font(.caption).foregroundStyle(.secondary)
+                Text(isShowingDemo ? "An example week for the demo. Your past activity data will appear here when available." : "Saved estimates of ambient conditions, not measured personal exposure.").font(.caption).foregroundStyle(.secondary)
             } else {
                 ProgressView("Preparing your week…").frame(maxWidth: .infinity, minHeight: 180)
             }
@@ -72,10 +73,36 @@ struct WeeklyOverviewView: View {
                     WeeklyExposureEngine.summarize(events: input.events, profileID: input.profileID, now: input.now, timeZone: input.timeZone)
                 }.value
                 guard !Task.isCancelled else { return }
-                summary = computed
+                isShowingDemo = computed.coveredSeconds == 0
+                summary = isShowingDemo ? demoWeek(in: computed) : computed
                 loadedProfileID = profileID
             }
-            .sheet(isPresented: $showingDetails) { if let summary { WeeklyDetailView(summary: summary) } }
+            .sheet(isPresented: $showingDetails) { if let summary { WeeklyDetailView(summary: summary, isDemo: isShowingDemo) } }
+    }
+    /// Presentation-only sample data: never saved as events or mixed with real coverage.
+    private func demoWeek(in period: WeeklyExposureSummary) -> WeeklyExposureSummary {
+        let dailyHours: [[Double]] = [
+            [1, 0.5, 0, 0, 0, 0],
+            [1.5, 0.5, 0, 0, 0, 0],
+            [1, 0, 0, 0, 0, 0],
+            [1.5, 0.5, 0, 0, 0, 0],
+            [1, 0.5, 0.5, 0, 0, 0],
+            [2, 0.5, 0, 0, 0, 0],
+            [1, 0.5, 0, 0, 0, 0]
+        ]
+        let days = zip(period.days, dailyHours).map { day, hours in
+            WeeklyDay(start: day.start, scheduledSeconds: hours.reduce(0, +) * 3600,
+                      categorySeconds: hours.map { $0 * 3600 })
+        }
+        var demo = WeeklyExposureSummary(start: period.start, end: period.end,
+                                         timeZone: period.timeZone, days: days, contributions: [])
+        demo.scheduledSeconds = days.reduce(0) { $0 + $1.scheduledSeconds }
+        demo.categorySeconds = (0..<6).map { category in
+            days.reduce(0) { $0 + $1.categorySeconds[category] }
+        }
+        demo.pm25Seconds = demo.scheduledSeconds
+        demo.pm25Integral = 8.4 * demo.pm25Seconds / 3600
+        return demo
     }
     private func distribution(_ summary: WeeklyExposureSummary) -> some View {
         ZStack {
@@ -153,14 +180,15 @@ struct WeeklyTimeline: View {
 
 struct WeeklyDetailView: View {
     let summary: WeeklyExposureSummary
+    var isDemo = false
     @Environment(\.dismiss) private var dismiss
     var body: some View {
         NavigationStack {
             List {
-                Section("Estimated from your calendar") {
+                Section(isDemo ? "Demo week · Sample data" : "Estimated from your calendar") {
                     Text("\(weeklyDate(summary.start, in: summary.timeZone)) through \(weeklyDate(summary.end, in: summary.timeZone, time: true))")
                     Text("Reporting timezone: \(summary.timeZone.identifier)").font(.caption).foregroundStyle(.secondary)
-                    Text("Includes this profile's saved Resilio plans. Apple Calendar events must first be made into a Resilio plan for this profile.")
+                    Text(isDemo ? "This example shows 12.5 hours of sample activities across seven days. The air-quality values are hardcoded for the demo and are not taken from your calendar or saved as plans." : "Includes this profile's saved Resilio plans. Apple Calendar events must first be made into a Resilio plan for this profile.")
                     Text("These are estimated outdoor ambient conditions during scheduled activities. They do not confirm attendance, measure personal exposure, or measure indoor air quality.")
                 }
                 Section("Coverage & estimates") {
@@ -195,6 +223,7 @@ struct WeeklyDetailView: View {
                     Text("Saved forecasts remain estimates. We do not replace past conditions with today's forecast. Older plans without hourly records appear as missing coverage.")
                     AQIScale(category: nil)
                 }
+                if !isDemo {
                 Section("Contributing plans") {
                     if summary.contributions.isEmpty { Text("No elapsed plans in this reporting period.").foregroundStyle(.secondary) }
                     ForEach(summary.contributions) { contribution in
@@ -212,6 +241,7 @@ struct WeeklyDetailView: View {
                             } else { Text("No saved hourly data. A summary alone cannot establish hourly coverage.") }
                         }.font(.subheadline)
                     }
+                }
                 }
             }.resilioForm().navigationTitle("Your week").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
