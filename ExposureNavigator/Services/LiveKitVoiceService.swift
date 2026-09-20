@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 #if canImport(LiveKit)
 import LiveKit
@@ -48,11 +49,20 @@ enum LiveKitVoiceService {
         http.timeoutInterval = 20
         http.setValue("application/json", forHTTPHeaderField: "Content-Type")
         http.httpBody = try JSONEncoder.appEncoder.encode(VoiceTokenRequest(identity: identity, room: room))
-        let (data, response) = try await URLSession.shared.data(for: http)
-        guard let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode) else { throw VoiceServiceError.invalidResponse }
-        let token = try JSONDecoder.appDecoder.decode(VoiceTokenResponse.self, from: data)
-        guard URL(string: token.url) != nil, !token.token.isEmpty else { throw VoiceServiceError.invalidResponse }
-        return token
+        do {
+            let (data, response) = try await URLSession.shared.data(for: http)
+            guard let response = response as? HTTPURLResponse else { throw VoiceServiceError.invalidResponse }
+            guard (200..<300).contains(response.statusCode) else {
+                throw VoiceServiceError.connectionFailed("Token server returned HTTP \(response.statusCode). Is python3 token_server.py running?")
+            }
+            let token = try JSONDecoder.appDecoder.decode(VoiceTokenResponse.self, from: data)
+            guard URL(string: token.url) != nil, !token.token.isEmpty else { throw VoiceServiceError.invalidResponse }
+            return token
+        } catch let error as VoiceServiceError {
+            throw error
+        } catch {
+            throw VoiceServiceError.connectionFailed("Couldn't reach the voice token server at \(endpoint.absoluteString). Start VoiceAgent/start_token_server.sh.")
+        }
     }
 }
 
@@ -107,8 +117,13 @@ final class VoiceSessionController {
     ) async throws {
         guard LiveKitVoiceService.isConfigured else { throw VoiceServiceError.setupRequired }
 #if canImport(LiveKit)
+        try LiveKitAudioSession.prepare()
+        guard await LiveKitSDK.ensureDeviceAccess(for: [.audio]) else {
+            throw VoiceServiceError.connectionFailed("Microphone permission was denied. Allow it, or in Simulator use I/O → Audio Input and pick your Mac microphone.")
+        }
         let credentials = try await LiveKitVoiceService.token(identity: identity, room: roomName)
-        let room = Room()
+        let capture = LiveKitAudioSession.captureOptions
+        let room = Room(roomOptions: RoomOptions(defaultAudioCaptureOptions: capture))
         self.room = room
         for method in VoiceToolMethod.allCases {
             try await room.registerRpcMethod(method.rawValue) { data in
@@ -116,7 +131,11 @@ final class VoiceSessionController {
             }
         }
         try await room.connect(url: credentials.url, token: credentials.token)
-        try await room.localParticipant.setMicrophone(enabled: true)
+        do {
+            try await room.localParticipant.setMicrophone(enabled: true, captureOptions: capture)
+        } catch {
+            throw VoiceServiceError.connectionFailed(LiveKitAudioSession.describe(error))
+        }
 #else
         _ = makeBroker
         _ = currentSession
@@ -138,3 +157,39 @@ final class VoiceSessionController {
         return try broker.response(for: updated)
     }
 }
+
+#if canImport(LiveKit)
+/// Simulator Voice Processing I/O commonly fails with -4010. Use software processing there.
+private enum LiveKitAudioSession {
+    static var captureOptions: AudioCaptureOptions {
+        #if targetEnvironment(simulator)
+        AudioCaptureOptions(
+            echoCancellation: true,
+            autoGainControl: true,
+            noiseSuppression: true,
+            echoCancellationMode: .software,
+            autoGainControlMode: .software,
+            noiseSuppressionMode: .software
+        )
+        #else
+        AudioCaptureOptions()
+        #endif
+    }
+
+    static func prepare() throws {
+        AudioManager.shared.isSpeakerOutputPreferred = true
+        #if targetEnvironment(simulator)
+        AudioManager.shared.isVoiceProcessingBypassed = true
+        try AudioManager.shared.setPlatformVoiceProcessingAllowed(false)
+        #endif
+    }
+
+    static func describe(_ error: Error) -> String {
+        let text = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        if text.contains("-4010") || text.localizedCaseInsensitiveContains("audio engine") {
+            return "The simulator audio engine failed (-4010). In Simulator: I/O → Audio Input → your Mac microphone. Also allow Microphone for Simulator in macOS System Settings. A physical iPhone is more reliable."
+        }
+        return text
+    }
+}
+#endif

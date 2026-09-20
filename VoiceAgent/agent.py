@@ -8,9 +8,16 @@ import os
 
 from dotenv import load_dotenv
 from livekit.agents import Agent, AgentServer, AgentSession, JobContext, RunContext, ToolError, cli, function_tool, get_job_context
-from livekit.plugins import openai, silero
+from livekit.plugins import silero
 
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+
+_required = ("LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET")
+_missing = [name for name in _required if not os.getenv(name) or "your-project" in os.getenv(name, "")]
+if _missing:
+    raise SystemExit("Fill these in VoiceAgent/.env first: " + ", ".join(_missing))
+if not os.getenv("GROQ_API_KEY") and not os.getenv("OPENAI_API_KEY"):
+    raise SystemExit("Set GROQ_API_KEY (free) or OPENAI_API_KEY in VoiceAgent/.env")
 
 INSTRUCTIONS = """
 You are Resilio's voice planner. You do not compute air quality, exposure, heat risk, or safer routes.
@@ -73,13 +80,33 @@ class ResilioPlanner(Agent):
 server = AgentServer()
 
 
+def voice_models() -> tuple:
+    if os.getenv("GROQ_API_KEY"):
+        from livekit.plugins import groq
+
+        return (
+            groq.STT(model="whisper-large-v3-turbo", language="en"),
+            groq.LLM(model=os.environ.get("RESILIO_VOICE_LLM", "llama-3.3-70b-versatile")),
+            groq.TTS(model="canopylabs/orpheus-v1-english", voice="austin"),
+        )
+    from livekit.plugins import openai
+
+    return (
+        openai.STT(),
+        openai.LLM(model=os.environ.get("RESILIO_VOICE_LLM", "gpt-4o-mini")),
+        openai.TTS(),
+    )
+
+
 @server.rtc_session(agent_name="resilio-planner")
 async def entrypoint(ctx: JobContext) -> None:
+    await ctx.connect()
+    stt, llm, tts = voice_models()
     session = AgentSession(
         vad=silero.VAD.load(),
-        stt=openai.STT(),
-        llm=openai.LLM(model=os.environ.get("RESILIO_VOICE_LLM", "gpt-4o-mini")),
-        tts=openai.TTS(),
+        stt=stt,
+        llm=llm,
+        tts=tts,
     )
     await session.start(agent=ResilioPlanner(), room=ctx.room)
     await session.generate_reply(instructions="Greet briefly and ask what they want to plan. Do not mention health data.")

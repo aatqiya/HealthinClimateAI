@@ -16,19 +16,26 @@ No authentication backend, account credentials, or hosted AI credentials were su
 
 ### LiveKit voice planner
 
-Text Plan with AI works on-device. Voice is **Setup required** until you deploy the worker in `VoiceAgent/` and set a non-secret `RESILIO_VOICE_ENDPOINT` Info.plist string (HTTPS, or http://127.0.0.1 for local testing).
+Text Plan with AI works on-device without accounts. Voice needs keys you paste into `VoiceAgent/.env` (never into the iOS bundle). The simulator already points at `http://127.0.0.1:8787/token`.
 
 The iOS client requests a short-lived room token from that endpoint, joins a LiveKit room, and registers RPC methods. The Python agent only talks and calls those methods. `PlanningAgent` still searches places, fetches forecasts, scores exposure, builds guidance, and saves events on the device. Snapshots sent back to the agent include spoken replies, missing slots, place names, and computed PM2.5/heat summaries. They never include medical conditions, medications, age, or home ZIP.
 
+**What you supply (once):**
+
+1. [LiveKit Cloud](https://cloud.livekit.io) → create a project → copy **WebSocket URL** (`wss://….livekit.cloud`), **API Key**, and **API Secret**.
+2. [Groq](https://console.groq.com/keys) (free) → create an API key. OpenAI also works if you have credits.
+
+**What you run every demo:**
+
 ```
 cd VoiceAgent
-cp .env.example .env   # add LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET, OPENAI_API_KEY
-python3 -m pip install -r requirements.txt
-python3 token_server.py          # POST /token → { url, token, room }
-python3 agent.py dev             # LiveKit worker named resilio-planner
+./start_token_server.sh    # first run copies .env; paste the four values and run again
+./start_agent.sh           # second terminal — worker named resilio-planner
 ```
 
-Point `RESILIO_VOICE_ENDPOINT` at `https://your-host/token`. LiveKit and OpenAI keys stay in `.env`. This path has not been live-tested because no LiveKit project was supplied.
+Then open `ExposureNavigator.xcodeproj`, run the **ExposureNavigator** scheme on the iOS Simulator, open Plan with AI, tap the mic, and allow the microphone.
+
+Physical iPhone: set `VOICE_TOKEN_HOST=0.0.0.0` in `.env` and change `RESILIO_VOICE_ENDPOINT` to `http://YOUR_MAC_LAN_IP:8787/token`. Keys stay in `.env`. This path has not been live-tested because no LiveKit project was supplied.
 
 ### Google Maps / Routes
 
