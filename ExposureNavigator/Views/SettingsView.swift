@@ -26,11 +26,11 @@ struct SettingsView: View {
             }
             Section("Privacy") {
                 NavigationLink("Terms & privacy") { LegalView() }
-                Text("Health details are optional and stay on this device. Edit a profile to remove them. Environmental services receive location and time, never health details.").font(.subheadline)
+                PrivacyNote()
                 if let accepted = UserDefaults.standard.object(forKey: "legalAcceptedAt") as? Date { LabeledContent("Agreement recorded", value: accepted.formatted(date: .abbreviated, time: .omitted)) }
             }
             Section { ResilioBrand(); Text("Version 1.0 · Plan your day with a little more context.").font(.caption).foregroundStyle(.secondary) }
-        }.navigationTitle("Settings").navigationBarTitleDisplayMode(.inline)
+        }.resilioForm().navigationTitle("Settings").navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $choosingLocation) { LocationPickerView { app.manualLocation = $0 } }
     }
 }

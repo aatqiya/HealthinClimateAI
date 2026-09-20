@@ -67,10 +67,10 @@ struct PlanBuilderView: View {
                 if let validationMessage { Section { Text(validationMessage).font(.subheadline).foregroundStyle(.secondary) } }
                 if let error { Section { Text(error).foregroundStyle(.secondary) } }
                 Section {
-                    Button("See Exposure", action: build).buttonStyle(PrimaryButtonStyle()).disabled(!valid || resolving).opacity(valid && !resolving ? 1 : 0.45)
+                    Button("Explore options", action: build).buttonStyle(PrimaryButtonStyle()).disabled(!valid || resolving).opacity(valid && !resolving ? 1 : 0.45)
                     if draft.editingEventID != nil { Button("Cancel editing") { draft = PlanDraft(); draft.profileID = app.profiles.selectedProfileID } }
                 } footer: { Text("Explore modeled exposure, then choose what fits. Resilio does not decide whether an activity is medically safe.") }
-            }.navigationTitle(draft.editingEventID == nil ? "Schedule" : "Edit plan")
+            }.resilioForm().navigationTitle(draft.editingEventID == nil ? "Schedule" : "Edit plan")
                 .navigationDestination(item: $builtPlan) { plan in ResultsView(plan: plan, existingEventID: draft.editingEventID, route: draft.selectedRoute) }
                 .onAppear(perform: loadDraft)
                 .onChange(of: app.scheduleDraft) { _, incoming in if incoming != nil { loadDraft() } }

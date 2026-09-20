@@ -29,7 +29,7 @@ struct LocationPickerView: View {
                 if resolving { ProgressView("Finding location…") }
                 if let error { Text(error).foregroundStyle(.secondary) }
             }
-            .navigationTitle("Choose a location").navigationBarTitleDisplayMode(.inline)
+            .resilioForm().navigationTitle("Choose a location").navigationBarTitleDisplayMode(.inline)
             .toolbar { Button("Cancel") { dismiss() } }
         }.tint(ResilioTheme.tint)
     }

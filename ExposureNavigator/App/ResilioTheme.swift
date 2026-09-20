@@ -1,6 +1,11 @@
 import SwiftUI
 
 enum ResilioTheme {
+    static let pageInset: CGFloat = 20
+    static let cardRadius: CGFloat = 24
+    static let controlRadius: CGFloat = 16
+    static let sectionSpacing: CGFloat = 24
+    static let cardInset: CGFloat = 20
     static let sage = Color(red: 0.59, green: 0.67, blue: 0.55)
     static let forest = Color(red: 0.24, green: 0.36, blue: 0.28)
     static let background = Color(uiColor: .systemGroupedBackground)
@@ -35,22 +40,30 @@ struct ResilioLogoMark: View {
 }
 
 struct PrimaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
     func makeBody(configuration: Configuration) -> some View {
         configuration.label.font(.headline).frame(maxWidth: .infinity).padding(.vertical, 16)
             .foregroundStyle(.white)
-            .background(ResilioTheme.forest.opacity(configuration.isPressed ? 0.8 : 1), in: RoundedRectangle(cornerRadius: 18))
+            .background(ResilioTheme.forest.opacity(isEnabled ? (configuration.isPressed ? 0.8 : 1) : 0.45), in: RoundedRectangle(cornerRadius: ResilioTheme.controlRadius))
     }
 }
 
 extension View {
+    func resilioForm() -> some View {
+        scrollContentBackground(.hidden)
+            .background(ResilioTheme.background)
+            .listSectionSpacing(ResilioTheme.sectionSpacing)
+            .environment(\.defaultMinListRowHeight, 48)
+    }
+
     func resilioCard() -> some View {
-        padding(18).frame(maxWidth: .infinity, alignment: .leading)
-            .background(ResilioTheme.surface, in: RoundedRectangle(cornerRadius: 22))
+        padding(ResilioTheme.cardInset).frame(maxWidth: .infinity, alignment: .leading)
+            .background(ResilioTheme.surface, in: RoundedRectangle(cornerRadius: ResilioTheme.cardRadius))
     }
 }
 
-/// A shared bad-to-good scale so every reading that has an official category
-/// (US AQI, EPA PM2.5 breakpoints, NWS heat index) renders with the same colors.
+/// Shared category accents for provider-reported US AQI and modeled heat.
+/// Raw particle concentrations are never given an AQI badge.
 enum SeverityLevel: Int, Comparable {
     case good, moderate, elevated, high, veryHigh, extreme
     static func < (lhs: SeverityLevel, rhs: SeverityLevel) -> Bool { lhs.rawValue < rhs.rawValue }
@@ -72,7 +85,7 @@ struct SeverityBadge: View {
     var body: some View {
         HStack(spacing: 6) {
             Circle().fill(level.color).frame(width: 8, height: 8)
-            Text(label).font(.caption.weight(.semibold)).foregroundStyle(level.color)
+            Text(label).font(.caption.weight(.semibold)).foregroundStyle(.primary).fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, 10).padding(.vertical, 5)
         .background(level.color.opacity(0.15), in: Capsule())
@@ -86,43 +99,13 @@ enum DisplayFormat {
     }
     /// U.S. AQI breakpoints (airnow.gov/aqi/aqi-basics), for an already-computed AQI index.
     static func airQualityLevel(_ aqi: Double?) -> SeverityLevel? {
-        guard let aqi else { return nil }
-        switch aqi { case ...50: return .good; case ...100: return .moderate; case ...150: return .elevated; case ...200: return .high; case ...300: return .veryHigh; default: return .extreme }
+        AQICategory.category(for: aqi).flatMap { SeverityLevel(rawValue: $0.rawValue) }
     }
     static func airQuality(_ aqi: Double?) -> String {
-        guard let level = airQualityLevel(aqi) else { return "Unavailable" }
-        switch level {
-        case .good: return "Good"
-        case .moderate: return "Moderate"
-        case .elevated: return "Sensitive groups"
-        case .high: return "Unhealthy"
-        case .veryHigh: return "Very unhealthy"
-        case .extreme: return "Hazardous"
-        }
+        AQICategory.category(for: aqi)?.label ?? "Unavailable"
     }
     static func aqiBadge(_ aqi: Double?) -> (label: String, level: SeverityLevel)? {
         airQualityLevel(aqi).map { (airQuality(aqi), $0) }
-    }
-    /// EPA 24-hour PM2.5 NAAQS breakpoints in µg/m³ (airnow.gov/aqi/aqi-basics), for a raw
-    /// forecast concentration where no AQI index has been computed (e.g. modeled exposure).
-    static func pm25Level(_ microgramsPerCubicMeter: Double?) -> SeverityLevel? {
-        guard let value = microgramsPerCubicMeter else { return nil }
-        switch value { case ...9.0: return .good; case ...35.4: return .moderate; case ...55.4: return .elevated; case ...125.4: return .high; case ...225.4: return .veryHigh; default: return .extreme }
-    }
-    static func pm25Category(_ microgramsPerCubicMeter: Double?) -> String? {
-        switch pm25Level(microgramsPerCubicMeter) {
-        case .good: return "Good"
-        case .moderate: return "Moderate"
-        case .elevated: return "Sensitive groups"
-        case .high: return "Unhealthy"
-        case .veryHigh: return "Very unhealthy"
-        case .extreme: return "Hazardous"
-        case nil: return nil
-        }
-    }
-    static func pm25Badge(_ microgramsPerCubicMeter: Double?) -> (label: String, level: SeverityLevel)? {
-        guard let level = pm25Level(microgramsPerCubicMeter), let label = pm25Category(microgramsPerCubicMeter) else { return nil }
-        return (label, level)
     }
     /// NWS heat index categories (weather.gov/safety/heat-index), applied to modeled apparent
     /// temperature in Celsius (26.7°C/32.2°C/39.4°C/51.7°C ≈ 80°F/90°F/103°F/125°F).

@@ -7,6 +7,7 @@ final class EventStore {
     var storageError: String?
     private let fileURL: URL
     private var loadFailed = false
+    var isReadable: Bool { !loadFailed }
     init(directory: URL? = nil) {
         let directory = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         fileURL = directory.appendingPathComponent("events.json")

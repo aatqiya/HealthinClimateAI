@@ -105,6 +105,93 @@ struct RegressionTests {
         _ = try await repository.fetchConditions(latitude: 40, longitude: -73, range: hour...hour.addingTimeInterval(3600))
         let count = await provider.count
         check(count == 1, "simultaneous requests coalesce and minute checks reuse cached forecast")
+        // Absolute AQI grading is independent of concentration and exposure.
+        for (value, category) in [(0, AQICategory.good), (50, .good), (51, .moderate), (100, .moderate), (101, .sensitive), (150, .sensitive), (151, .unhealthy), (200, .unhealthy), (201, .veryUnhealthy), (300, .veryUnhealthy), (301, .hazardous), (700, .hazardous)] {
+            check(AQICategory.category(for: Double(value)) == category, "AQI boundary \(value)")
+        }
+        for boundary in [50.0, 100, 150, 200, 300] {
+            check(AQICategory.category(for: boundary + 0.49) == AQICategory.category(for: boundary), "AQI rounds down consistently at \(boundary)")
+            check(AQICategory.category(for: boundary + 0.5) == AQICategory.category(for: boundary + 1), "AQI rounds up consistently at \(boundary)")
+        }
+        for invalid in [Double?.none, -1, -.infinity, .infinity, .nan, Double.greatestFiniteMagnitude] {
+            check(AQICategory.reading(invalid) == nil && AQICategory.category(for: invalid) == nil, "Invalid AQI is unavailable: \(String(describing: invalid))")
+        }
+        var air = series([
+            .init(timestamp: hour, pm25: 50, usAQI: 180),
+            .init(timestamp: hour.addingTimeInterval(3600), pm25: 40, usAQI: 160),
+            .init(timestamp: hour.addingTimeInterval(7200), pm25: 40, usAQI: nil)
+        ])
+        air.fetchedAt = hour.addingTimeInterval(-3600)
+        let multiHour = AQIWindow.assess(series: air, start: hour.addingTimeInterval(1800), end: hour.addingTimeInterval(5400))
+        check(multiHour.peak == 180 && multiHour.coveredSeconds == 3600 && !multiHour.isPartial, "AQI peak spans partial overlapping hours")
+        let missingAQI = AQIWindow.assess(series: air, start: hour.addingTimeInterval(5400), end: hour.addingTimeInterval(9000))
+        check(missingAQI.peak == 160 && missingAQI.coveredSeconds == 1800 && missingAQI.isPartial, "AQI partial window does not imply full coverage")
+        check(AQIWindow.assess(series: air, start: hour, end: hour.addingTimeInterval(3600)).peak == 180, "AQI excludes hour at exact end boundary")
+        var duplicateAir = air; duplicateAir.samples.append(air.samples[0])
+        check(AQIWindow.assess(series: duplicateAir, start: hour, end: hour.addingTimeInterval(3600)).coveredSeconds == 3600, "AQI repeated hours do not inflate coverage")
+        var unhealthyPlan = plan; unhealthyPlan.startTime = hour; unhealthyPlan.durationMinutes = 60; unhealthyPlan.constraints = .init(timeFlexibility: .oneHour)
+        let unhealthyOptions = CounterfactualEngine.evaluate(plan: unhealthyPlan, series: air, now: hour.addingTimeInterval(-1))
+        check(unhealthyOptions.alternatives.contains { abs(($0.reductionPercent(for: .pm25) ?? 0) - 20) < 0.001 && $0.assessment.aqi.category == .unhealthy }, "20 percent lower particle exposure can still have Unhealthy AQI")
+
+        func savedEvent(start: Date, minutes: Int, samples: [EnvironmentalSample], owner: UUID? = nil, place: ActivityLocation? = nil) -> ActivityEvent {
+            let place = place ?? location
+            var environment = series(samples); environment.fetchedAt = start.addingTimeInterval(-3600)
+            let activity = ActivityPlan(profileID: owner ?? profile.id, activityType: .exercise, activityName: "Weekly fixture", location: place, startTime: start.addingTimeInterval(-3600), durationMinutes: minutes)
+            let snapshot = ExposureSnapshot(environmentalWindow: SavedEnvironmentalWindow(location: place, start: start, end: start.addingTimeInterval(Double(minutes) * 60), series: environment), analyzedAt: environment.fetchedAt, source: environment.source, sourceUpdatedAt: environment.fetchedAt, originalStart: activity.startTime, selectedStart: start, pm25Mean: nil, apparentTemperatureC: nil, reductionPercent: nil)
+            return ActivityEvent(plan: activity, selectedStart: start, selectedRoute: nil, analysis: snapshot, createdAt: start)
+        }
+        let weeklyEvent = savedEvent(start: hour.addingTimeInterval(1800), minutes: 120, samples: [
+            .init(timestamp: hour, pm25: 10, usAQI: 30),
+            .init(timestamp: hour.addingTimeInterval(3600), pm25: 20, usAQI: 180),
+            .init(timestamp: hour.addingTimeInterval(7200), pm25: nil, usAQI: nil)
+        ])
+        let utc = TimeZone(secondsFromGMT: 0)!
+        let weekNow = hour.addingTimeInterval(86400)
+        func week(_ events: [ActivityEvent], now: Date? = nil) -> WeeklyExposureSummary {
+            WeeklyExposureEngine.summarize(events: events, profileID: profile.id, now: now ?? weekNow, timeZone: utc)
+        }
+        let weighted = week([weeklyEvent])
+        check(weighted.scheduledSeconds == 7200 && weighted.coveredSeconds == 5400 && weighted.missingSeconds == 1800, "weekly missing coverage excludes missing hours")
+        check(weighted.categorySeconds[0] == 1800 && weighted.categorySeconds[3] == 3600, "weekly categories use time weights, not event peak")
+        check(abs(weighted.pm25Mean! - 50.0 / 3) < 0.001 && weighted.pm25Integral == 25 && weighted.pm25Seconds == 5400, "weekly PM2.5 mean and integral use covered time")
+        check(weighted.days.reduce(0) { $0 + $1.coveredSeconds } == weighted.coveredSeconds, "seven-day contributions reconcile")
+        let clippedNow = week([weeklyEvent], now: hour.addingTimeInterval(4500))
+        check(clippedNow.scheduledSeconds == 2700 && clippedNow.categorySeconds[3] == 900, "weekly ongoing event counts only elapsed portion at selected time")
+        check(week([weeklyEvent], now: hour).scheduledSeconds == 0, "weekly future plans contribute nothing")
+        var copy = weeklyEvent; copy.id = UUID()
+        let deduped = week([weeklyEvent, copy])
+        check(deduped.scheduledSeconds == 7200 && deduped.coveredSeconds == 5400 && deduped.pm25Integral == 25, "same-location overlapping events count once")
+        check(deduped.contributions.reduce(0) { $0 + $1.aqiSeconds } == deduped.coveredSeconds, "contributing events do not double-count overlap")
+        var otherPlace = location; otherPlace.longitude += 0.001
+        let conflict = savedEvent(start: hour.addingTimeInterval(3600), minutes: 30, samples: air.samples, place: otherPlace)
+        let conflicted = week([weeklyEvent, conflict])
+        check(conflicted.conflictSeconds == 1800 && conflicted.coveredSeconds == 3600 && conflicted.pm25Seconds == 3600, "different locations exclude only conflicted time from both metrics")
+        var otherProfile = weeklyEvent; otherProfile.plan.profileID = another.id
+        check(week([otherProfile]).scheduledSeconds == 0 && week([weeklyEvent, otherProfile]).scheduledSeconds == 7200, "weekly profile isolation")
+        check(WeeklyExposureEngine.summarize(events: [weeklyEvent], profileID: nil, now: weekNow, timeZone: utc).scheduledSeconds == 0, "no selected profile has no summary data")
+        var legacy = weeklyEvent; legacy.analysis?.environmentalWindow = nil
+        let legacyData = try JSONEncoder.appEncoder.encode(legacy)
+        check(!String(decoding: legacyData, as: UTF8.self).contains("environmentalWindow"), "legacy snapshot omits new optional field")
+        let decodedLegacy = try JSONDecoder.appDecoder.decode(ActivityEvent.self, from: legacyData)
+        check(decodedLegacy.analysis?.environmentalWindow == nil && decodedLegacy.savedAQI.peak == nil && week([decodedLegacy]).coveredSeconds == 0, "older saved events decode with honest missing coverage")
+        let savedRoundTrip = try JSONDecoder.appDecoder.decode(ActivityEvent.self, from: JSONEncoder.appEncoder.encode(weeklyEvent))
+        check(savedRoundTrip == weeklyEvent && savedRoundTrip.analysis?.environmentalWindow?.series.source == "Synthetic regression fixture", "saved hourly data and provenance round trip")
+        var lateForecast = weeklyEvent
+        lateForecast.analysis?.environmentalWindow?.series.fetchedAt = weekNow
+        check(week([lateForecast]).coveredSeconds == 0, "today's forecast never replaces past conditions")
+        var mismatched = weeklyEvent; mismatched.plan.location = otherPlace
+        check(week([mismatched]).coveredSeconds == 0 && mismatched.savedAQI.peak == nil, "saved environmental data must match event location")
+        let periodStart = weighted.start
+        let boundaryEvent = savedEvent(start: periodStart.addingTimeInterval(-1800), minutes: 60, samples: [.init(timestamp: periodStart.addingTimeInterval(-1800), pm25: 10, usAQI: 50)])
+        check(week([boundaryEvent]).scheduledSeconds == 1800 && week([boundaryEvent]).coveredSeconds == 1800, "weekly start boundary clips crossing events")
+        let invalidDataEvent = savedEvent(start: hour, minutes: 60, samples: [.init(timestamp: hour, pm25: -3, usAQI: -2)])
+        check(week([invalidDataEvent]).pm25Mean == nil && week([invalidDataEvent]).coveredSeconds == 0, "invalid weekly values are missing, not zero exposure")
+        let separateCoverage = savedEvent(start: hour, minutes: 60, samples: [.init(timestamp: hour, pm25: nil, usAQI: 30)])
+        check(week([separateCoverage]).coveredSeconds == 3600 && week([separateCoverage]).pm25Seconds == 0, "AQI and particle coverage stay independent")
+        let ny = TimeZone(identifier: "America/New_York")!
+        let dstNow = ISO8601DateFormatter().date(from: "2026-03-09T04:00:00Z")!
+        let dstWeek = WeeklyExposureEngine.summarize(events: [], profileID: profile.id, now: dstNow, timeZone: ny)
+        check(dstWeek.days.count == 7 && dstWeek.days[6].start.timeIntervalSince(dstWeek.days[5].start) == 23 * 3600, "reporting calendar respects DST and seven local days")
         print("\(passed) regression checks passed")
     }
 }

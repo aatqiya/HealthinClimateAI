@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXFileReference section */
+		A1000007 /* ExposureNavigator.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ExposureNavigator.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		A1000003 /* ExposureNavigator */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
@@ -65,16 +69,6 @@
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
-
-/* Begin PBXFileReference section */
-		A1000007 /* ExposureNavigator.app */ = {
-			isa = PBXFileReference;
-			explicitFileType = wrapper.application;
-			includeInIndex = 0;
-			path = ExposureNavigator.app;
-			sourceTree = BUILT_PRODUCTS_DIR;
-		};
-/* End PBXFileReference section */
 
 /* Begin PBXProject section */
 		A1000000 /* Project object */ = {
@@ -174,27 +168,27 @@
 		A1000013 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOL_FRAMEWORKS = SwiftUI;
-                ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-                INFOPLIST_KEY_CFBundleDisplayName = Resilio;
 				CODE_SIGN_ENTITLEMENTS = ExposureNavigator/ExposureNavigator.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Use your location for nearby forecasts. Coordinates are sent to weather services; saved activity locations stay on this device.";
+				INFOPLIST_KEY_CFBundleDisplayName = Resilio;
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Connect Apple Calendar only when you choose, so your events can appear together.";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Connect Apple Health only when you choose, so future features can use it. Resilio does not read Apple Health data yet.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Use your location for nearby forecasts. Coordinates are sent to weather services; saved activity locations stay on this device.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.hackathon.ExposureNavigator";
+				PRODUCT_BUNDLE_IDENTIFIER = com.hackathon.ExposureNavigator;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -206,27 +200,27 @@
 		A1000014 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOL_FRAMEWORKS = SwiftUI;
-                ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-                INFOPLIST_KEY_CFBundleDisplayName = Resilio;
 				CODE_SIGN_ENTITLEMENTS = ExposureNavigator/ExposureNavigator.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Use your location for nearby forecasts. Coordinates are sent to weather services; saved activity locations stay on this device.";
+				INFOPLIST_KEY_CFBundleDisplayName = Resilio;
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Connect Apple Calendar only when you choose, so your events can appear together.";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Connect Apple Health only when you choose, so future features can use it. Resilio does not read Apple Health data yet.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Use your location for nearby forecasts. Coordinates are sent to weather services; saved activity locations stay on this device.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.hackathon.ExposureNavigator";
+				PRODUCT_BUNDLE_IDENTIFIER = com.hackathon.ExposureNavigator;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_EMIT_LOC_STRINGS = YES;

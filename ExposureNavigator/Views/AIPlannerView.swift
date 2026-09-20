@@ -12,7 +12,7 @@ struct AIPlannerView: View {
                     Image(systemName: "sparkles").font(.largeTitle).foregroundStyle(ResilioTheme.tint)
                     Text("What's the plan?").font(.largeTitle.bold())
                     Text("Tell us who, what, and when. Then review the details before checking exposure.").foregroundStyle(.secondary)
-                    Text("On-device assistant · Hosted AI is not configured. This version extracts simple plans locally; it may miss details.").font(.caption).foregroundStyle(.secondary)
+                    Text("Your message is processed on this device. Review the draft for any missed details.").font(.caption).foregroundStyle(.secondary)
                     TextField("Maya has soccer practice tomorrow at 6 pm for an hour and a half.", text: $message, axis: .vertical)
                         .lineLimit(4...8).padding(16).background(ResilioTheme.surface, in: RoundedRectangle(cornerRadius: 18))
                     Button("Create a draft") { parsed = LocalPlanAssistant().extract(message, profiles: app.profiles.profiles, now: Date()) }.buttonStyle(PrimaryButtonStyle()).disabled(message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -26,7 +26,7 @@ struct AIPlannerView: View {
                         Button("Review in Schedule") { app.scheduleDraft = parsed.draft; app.selectedTab = .schedule; dismiss() }.buttonStyle(PrimaryButtonStyle())
                     }
                 }.padding(24)
-            }.background(ResilioTheme.background).navigationTitle("Plan with AI").navigationBarTitleDisplayMode(.inline)
+            }.background(ResilioTheme.background).navigationTitle("Planning assistant").navigationBarTitleDisplayMode(.inline)
                 .toolbar { Button("Close") { dismiss() } }
         }
     }

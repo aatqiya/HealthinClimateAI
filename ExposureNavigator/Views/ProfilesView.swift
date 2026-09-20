@@ -30,7 +30,7 @@ struct ProfilesView: View {
                     NavigationLink { SettingsView() } label: { Label("Settings & connections", systemImage: "gearshape") }
                     NavigationLink { LegalView() } label: { Label("Privacy & optional data", systemImage: "hand.raised") }
                 }
-            }.navigationTitle("Profile")
+            }.resilioForm().navigationTitle("Profile")
                 .sheet(isPresented: $switching) { ProfileSwitcher() }
                 .sheet(item: $editing) { profile in
                     ProfileEditorView(profile: profile, onSave: app.profiles.update, onDelete: {
@@ -71,7 +71,7 @@ struct ProfileSwitcher: View {
                     Button { app.profiles.select(profile.id); dismiss() } label: { ProfileCard(profile: profile, selected: profile.id == app.profiles.selectedProfileID) }.buttonStyle(.plain)
                 }
                 Button("Add profile", systemImage: "plus") { creating = true }
-            }.navigationTitle("Planning for").toolbar { Button("Done") { dismiss() } }
+            }.resilioForm().navigationTitle("Planning for").navigationBarTitleDisplayMode(.inline).toolbar { Button("Done") { dismiss() } }
                 .sheet(isPresented: $creating) { ProfileEditorView(profile: .init(name: "", relationship: .myself), onSave: app.profiles.add, onDelete: nil) }
         }
     }
@@ -98,11 +98,12 @@ struct ProfileEditorView: View {
                     if !validZIP { Text("Enter a 5-digit US ZIP or ZIP+4.").font(.caption).foregroundStyle(.red) }
                     Text("Home ZIP helps show nearby conditions. Add exact activity addresses when scheduling.").font(.caption).foregroundStyle(.secondary)
                 }
+                Section("Health details · optional") { PrivacyNote(healthFields: true) }
                 TagInput(title: "Medical conditions", suggestions: HealthCondition.allCases.filter { $0.category != .mentalHealth }.map(\.label), values: $profile.medicalConditions)
                 TagInput(title: "Mental or cognitive conditions", suggestions: HealthCategory.mentalHealth.conditions.map(\.label), values: $profile.mentalConditions)
                 TagInput(title: "Medications", suggestions: ["Lisinopril", "Albuterol", "Metformin", "Atorvastatin"], values: $profile.medications)
                 if onDelete != nil { Section { Button("Delete profile and its Resilio plans", role: .destructive) { confirmingDelete = true } } }
-            }.navigationTitle(onDelete == nil ? "Create profile" : "Edit profile")
+            }.resilioForm().navigationTitle(onDelete == nil ? "Create profile" : "Edit profile")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }

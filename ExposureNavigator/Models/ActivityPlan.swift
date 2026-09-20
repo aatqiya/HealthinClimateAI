@@ -32,6 +32,7 @@ struct ActivityPlan: Identifiable, Codable, Equatable, Hashable {
     var endTime: Date { startTime.addingTimeInterval(TimeInterval(durationMinutes*60)) }
 }
 struct ExposureSnapshot: Codable, Equatable {
+    var environmentalWindow: SavedEnvironmentalWindow? = nil
     var sourceRetrievedAt: Date? = nil; var sourceMeasurementUpdatedAt: Date? = nil; var analyzedAt: Date; var source: String; var sourceUpdatedAt: Date; var originalStart: Date; var selectedStart: Date; var pm25Mean: Double?; var apparentTemperatureC: Double?; var reductionPercent: Double?
 }
 struct ActivityEvent: Identifiable, Codable, Equatable {

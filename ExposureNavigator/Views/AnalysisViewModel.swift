@@ -33,7 +33,7 @@ final class AnalysisViewModel {
                 range: range
             )
             let result = CounterfactualEngine.evaluate(plan: plan, series: series)
-            guard !result.original.metrics.isEmpty else {
+            guard !result.original.metrics.isEmpty || result.original.aqi.peak != nil else {
                 state = .failed("There isn't enough published data covering your activity window to model exposure.")
                 return
             }
