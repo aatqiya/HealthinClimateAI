@@ -33,7 +33,7 @@ struct AIPlannerView: View {
                 composer
             }
             .background(ResilioTheme.background)
-            .navigationTitle("Plan with AI")
+            .navigationTitle("Plan with Reso")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
